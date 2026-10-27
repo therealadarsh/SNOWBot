@@ -1,0 +1,13 @@
+schema_version: 1
+display_name: SNOWBot
+backend:
+  kind: cursor
+  api_key_env: CURSOR_API_KEY
+project:
+  root: .
+  agents_file: AGENTS.md
+  context_dir: .cursor
+pipeline:
+  setup_branch: chore/snowbot-setup
+  spec_path: docs/pipeline-spec.yaml
+  backlog_path: docs/backlog.yaml
