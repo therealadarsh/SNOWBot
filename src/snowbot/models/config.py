@@ -44,8 +44,9 @@ class ProjectConfig(BaseModel):
     root: Path = Field(default_factory=Path.cwd)
     agents_file: Path = Path("AGENTS.md")
     context_dir: Path = Path(".cursor")
+    memory_dir: Path = Path(".snowbot/memory")
 
-    @field_validator("root", "agents_file", "context_dir", mode="before")
+    @field_validator("root", "agents_file", "context_dir", "memory_dir", mode="before")
     @classmethod
     def _coerce_path(cls, value: Any) -> Path:
         return Path(value) if not isinstance(value, Path) else value

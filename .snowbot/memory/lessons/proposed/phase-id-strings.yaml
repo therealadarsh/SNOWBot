@@ -1,0 +1,17 @@
+id: lsn-phase-ids
+title: Use string phase ids including 1b
+body: |
+  Phase identifiers are strings (`1`, `1b`, `2`, …). Never map Phase 1b to integer 2 — that id is reserved
+  for the doctor phase. CLI and checklist keys must match exactly.
+status: proposed
+evidence:
+  - kind: file
+    ref: src/snowbot/models/phases.py
+    summary: normalize_phase_id validation
+  - kind: file
+    ref: src/snowbot/validator/checklist.yaml
+    summary: phases "1" and "1b"
+dedupe_key: string-phase-ids
+tags:
+  - process
+  - validator

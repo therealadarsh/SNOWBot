@@ -10,6 +10,13 @@ from typing import Annotated
 import typer
 
 from snowbot import __version__
+from snowbot.cli_memory import (
+    cmd_onboard,
+    cmd_playbook,
+    cmd_status_check,
+    cmd_validate,
+    register_lessons,
+)
 from snowbot.errors import ConfigError, SnowbotError
 from snowbot.logging_setup import configure_logging, get_logger
 from snowbot.models.config import load_config, resolve_config_path
@@ -107,6 +114,74 @@ def update() -> None:
     """Update SNOWBot templates and pipeline assets (Phase 6)."""
     typer.secho("update is not implemented in Phase 1.", fg=typer.colors.YELLOW)
     raise typer.Exit(code=2)
+
+
+@app.command("validate")
+def validate(
+    phase: Annotated[str, typer.Option("--phase", help="Phase id (e.g. 1, 1b, 2).")],
+    pr: Annotated[
+        str | None,
+        typer.Option("--pr", help="Optional PR URL for the validation report."),
+    ] = None,
+    base_ref: Annotated[
+        str | None,
+        typer.Option("--base-ref", help="Git ref for anti-gaming diff analysis."),
+    ] = None,
+    dry_run: Annotated[bool, typer.Option("--dry-run", help="Run checks without writing.")] = False,
+    config: Annotated[
+        Path | None,
+        typer.Option(help="Path to snowbot.yaml (default: ./snowbot.yaml or SNOWBOT_CONFIG)."),
+    ] = None,
+) -> None:
+    """Run phase validator checks and write a report under ``.snowbot/memory/validation/``."""
+    cmd_validate(phase=phase, pr=pr, base_ref=base_ref, dry_run=dry_run, config=config)
+
+
+@app.command()
+def playbook(
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Print without writing PLAYBOOK.md."),
+    ] = False,
+    config: Annotated[Path | None, typer.Option(help="Path to snowbot.yaml.")] = None,
+) -> None:
+    """Generate PLAYBOOK.md from accepted lessons (≤150 lines)."""
+    cmd_playbook(dry_run=dry_run, config=config)
+
+
+@app.command()
+def onboard(
+    stage: Annotated[str, typer.Option("--stage", help="Pipeline stage identifier.")],
+    task: Annotated[str | None, typer.Option("--task", help="Optional task focus.")] = None,
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Render without writing files."),
+    ] = False,
+    config: Annotated[Path | None, typer.Option(help="Path to snowbot.yaml.")] = None,
+) -> None:
+    """Render onboard role packs for a pipeline stage."""
+    cmd_onboard(stage=stage, task=task, dry_run=dry_run, config=config)
+
+
+@app.command()
+def status(
+    check: Annotated[
+        bool,
+        typer.Option("--check", help="Verify memory structure and INDEX/PLAYBOOK freshness."),
+    ] = False,
+    config: Annotated[
+        Path | None,
+        typer.Option(help="Path to snowbot.yaml (default: ./snowbot.yaml or SNOWBOT_CONFIG)."),
+    ] = None,
+) -> None:
+    """Show pipeline memory status (use ``--check`` for CI gate)."""
+    if not check:
+        typer.secho("Pass --check to validate .snowbot/memory freshness.", fg=typer.colors.YELLOW)
+        raise typer.Exit(code=2)
+    cmd_status_check(config=config)
+
+
+register_lessons(app)
 
 
 def main() -> None:

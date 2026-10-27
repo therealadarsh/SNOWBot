@@ -1,0 +1,17 @@
+id: lsn-api
+title: Verify external APIs before adapter implementation
+body: |
+  Phase 3+ backend adapters must not invent HTTP paths or auth flows; track gaps in OPEN_QUESTIONS.md
+  and add tests with fixtures before calling live services.
+status: proposed
+evidence:
+  - kind: file
+    ref: docs/OPEN_QUESTIONS.md
+    summary: Explicit unverified API list
+  - kind: adr
+    ref: docs/adr/0002-python-packaging-and-cli.md
+    summary: CLI-first delivery defers network adapters
+dedupe_key: verify-api-first
+tags:
+  - security
+  - cursor

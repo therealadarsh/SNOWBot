@@ -1,0 +1,12 @@
+id: lsn-changelog
+title: Record user-visible changes under CHANGELOG Unreleased
+body: |
+  Any CLI or behavior change must append to CHANGELOG.md [Unreleased] in the same PR as the code.
+status: proposed
+evidence:
+  - kind: file
+    ref: CHANGELOG.md
+    summary: Keep a Changelog format in repo
+dedupe_key: changelog-unreleased
+tags:
+  - docs

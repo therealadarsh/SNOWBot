@@ -1,2 +1,10 @@
 # Default reviewers for SNOWBot changes
 * @therealadarsh
+
+# Governance — requires human approval (label PR `governance`)
+AGENTS.md @therealadarsh
+CONTRIBUTING.md @therealadarsh
+.github/workflows/ @therealadarsh
+.pre-commit-config.yaml @therealadarsh
+pyproject.toml @therealadarsh
+src/snowbot/validator/ @therealadarsh

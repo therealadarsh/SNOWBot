@@ -55,6 +55,10 @@ Issues = "https://github.com/therealadarsh/SNOWBot/issues"
 [tool.hatch.build.targets.wheel]
 packages = ["src/snowbot"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"src/snowbot/validator/checklist.yaml" = "snowbot/validator/checklist.yaml"
+"src/snowbot/templates" = "snowbot/templates"
+
 [tool.ruff]
 target-version = "py311"
 line-length = 100
