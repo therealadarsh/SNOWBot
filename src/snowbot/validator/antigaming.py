@@ -87,9 +87,10 @@ def filter_diff_paths(
         left = path_a.group(1) if path_a else ""
         right = path_b.group(1) if path_b else ""
         path = left if left != "dev/null" else right
-        if path and path != "dev/null":
-            if path in exclude_files or any(path.startswith(prefix) for prefix in exclude_prefixes):
-                continue
+        if path and path != "dev/null" and (
+            path in exclude_files or any(path.startswith(prefix) for prefix in exclude_prefixes)
+        ):
+            continue
         kept.append(part)
     return "".join(kept)
 
