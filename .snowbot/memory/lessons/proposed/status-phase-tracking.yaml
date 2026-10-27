@@ -1,0 +1,12 @@
+id: lsn-status
+title: Update STATUS.md when phase scope changes
+body: |
+  Each phase PR must update STATUS.md so agents and humans share the same boundary definitions.
+status: proposed
+evidence:
+  - kind: file
+    ref: STATUS.md
+    summary: Phase overview table drives agent scope
+dedupe_key: status-md-updates
+tags:
+  - process

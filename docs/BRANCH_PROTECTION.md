@@ -4,9 +4,13 @@ CI enforces quality gates, but GitHub **rulesets** and security settings must be
 
 See [GITHUB_SETUP.md](GITHUB_SETUP.md) for click-by-click steps.
 
-## Recommended ruleset for `main`
+## Simple mode (recommended)
 
-Align the live ruleset with these settings:
+- **0** required PR approvals (architect validation is CI, not GitHub “Approve”)
+- Required checks include **`architect-gate`**, CI test matrix, `conventional-commit`, `pip-audit`, and (when enabled) `dependency-review`
+- Optional squash auto-merge after all checks pass
+
+## Strict ruleset for `main` (teams)
 
 | Setting | Value |
 | ------- | ----- |
@@ -21,10 +25,9 @@ Align the live ruleset with these settings:
 
 ### Required status checks (exact job names)
 
-Add these in the ruleset **Required checks** picker (names must match GitHub’s check labels):
-
 | Check name |
 | ---------- |
+| `architect-gate` |
 | `test (3.11)` |
 | `test (3.12)` |
 | `test (3.13)` |
@@ -33,22 +36,21 @@ Add these in the ruleset **Required checks** picker (names must match GitHub’s
 
 These correspond to workflow jobs:
 
+- **architect-gate** workflow → `architect-gate`
 - **CI** workflow → matrix jobs `test (3.11)`, `test (3.12)`, `test (3.13)`
 - **PR Title** workflow → `conventional-commit`
 - **Security** workflow → `pip-audit`
 
-Do **not** require `dependency-review` until the dependency graph is enabled (see below). That job uses `continue-on-error: true` so PRs stay unblocked while the graph is off.
+Do **not** require `dependency-review` until the dependency graph is enabled. That job uses `continue-on-error: true` so PRs stay unblocked while the graph is off.
 
 ### Dependabot and PR titles
 
-The **PR Title** workflow skips conventional-commit validation when `github.actor` is `dependabot[bot]` or `app/dependabot`, so Dependabot PRs are not failed by semantic title rules.
+The **PR Title** workflow skips conventional-commit validation when `github.actor` is `dependabot[bot]` or `app/dependabot`.
 
 ## Owner-only (cannot be done by agents)
 
-The following require a human with admin access on **therealadarsh/SNOWBot**:
-
-1. **Ruleset required checks** — Settings → Rules → rulesets → edit `main` ruleset → add the five check names above in the status checks UI.
-2. **Dependency graph** — Settings → **Security** → **Code security and analysis** → enable **Dependency graph** (needed for `dependency-review` in `.github/workflows/security.yml` to be meaningful; optional as a required check until enabled).
+1. **Ruleset required checks** — add the check names above in the status checks UI.
+2. **Dependency graph** — Settings → **Security** → **Code security and analysis** → enable **Dependency graph**.
 3. **Approving and merging PRs** — especially governance changes covered by CODEOWNERS.
 4. **Running `scripts/apply_branch_protection.sh`** with an admin `GH_TOKEN` — review the script first; default is dry-run only.
 
