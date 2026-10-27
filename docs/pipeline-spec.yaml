@@ -1,0 +1,9 @@
+schema_version: 1
+name: SNOWBot default pipeline
+phases:
+  - id: scaffold
+    title: Scaffold and models
+    steps:
+      - id: phase-1
+        title: Phase 1 scaffold
+        description: CLI, models, tests, CI, and documentation baseline.
