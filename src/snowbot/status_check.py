@@ -84,15 +84,14 @@ def run_status_check(layout: MemoryLayout) -> StatusReport:
             )
         )
 
-    if isinstance(index_updated, str):
-        if _is_stale(_parse_iso(index_updated)):
-            report.issues.append(
-                StatusIssue(
-                    "stale_index",
-                    "lessons INDEX not updated recently",
-                    "warning",
-                )
+    if isinstance(index_updated, str) and _is_stale(_parse_iso(index_updated)):
+        report.issues.append(
+            StatusIssue(
+                "stale_index",
+                "lessons INDEX not updated recently",
+                "warning",
             )
+        )
 
     if not layout.lessons_index.read_text(encoding="utf-8").strip():
         report.issues.append(

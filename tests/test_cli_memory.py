@@ -22,7 +22,7 @@ def test_status_requires_check_flag() -> None:
 
 
 def test_validate_dry_run() -> None:
-    result = runner.invoke(app, ["validate", "--phase", "1", "--dry-run"])
+    result = runner.invoke(app, ["validate", "--phase", "1b", "--dry-run"])
     assert result.exit_code == 0
 
 

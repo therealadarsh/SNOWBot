@@ -52,14 +52,27 @@ def cmd_status_check(
 
 
 def cmd_validate(
-    phase: Annotated[int, typer.Option("--phase", help="Phase number to validate.")],
+    phase: Annotated[str, typer.Option("--phase", help="Phase id (e.g. 1, 1b, 2).")],
     pr: Annotated[str | None, typer.Option("--pr", help="Optional PR URL for the report.")] = None,
+    base_ref: Annotated[
+        str | None,
+        typer.Option(
+            "--base-ref",
+            help="Git ref for anti-gaming diff (default: SNOWBOT_VALIDATE_BASE env).",
+        ),
+    ] = None,
     dry_run: Annotated[bool, typer.Option("--dry-run", help="Run checks without writing.")] = False,
     config: Annotated[Path | None, typer.Option(help="Path to snowbot.yaml")] = None,
 ) -> None:
     layout = _layout_from_cwd(config)
     try:
-        result = run_phase_validation(layout, phase, pr_url=pr, dry_run=dry_run)
+        result = run_phase_validation(
+            layout,
+            phase,
+            pr_url=pr,
+            dry_run=dry_run,
+            base_ref=base_ref,
+        )
     except ValueError as exc:
         typer.secho(str(exc), fg=typer.colors.RED)
         raise typer.Exit(code=1) from exc

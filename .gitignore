@@ -12,6 +12,7 @@ dist/
 .coverage
 htmlcov/
 .venv/
+.venv-validate/
 venv/
 .env
 *.log

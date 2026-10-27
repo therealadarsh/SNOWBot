@@ -12,6 +12,10 @@ lessons:
   status: proposed
   dedupe_key: open-questions-md
   path: ''
+- id: lsn-phase-ids
+  status: proposed
+  dedupe_key: string-phase-ids
+  path: ''
 - id: lsn-pr-size
   status: proposed
   dedupe_key: pr-size-discipline
@@ -31,6 +35,10 @@ lessons:
 - id: lsn-open-q
   status: proposed
   dedupe_key: open-questions-md
+  path: ''
+- id: lsn-phase-ids
+  status: proposed
+  dedupe_key: string-phase-ids
   path: ''
 - id: lsn-pr-size
   status: proposed

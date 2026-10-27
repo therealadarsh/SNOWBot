@@ -23,7 +23,7 @@ class StageHooks:
 
     def validator_gate(
         self,
-        phase: int,
+        phase: str,
         *,
         pr_url: str | None = None,
         dry_run: bool = False,

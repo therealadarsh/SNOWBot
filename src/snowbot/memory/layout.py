@@ -113,7 +113,7 @@ class MemoryLayout:
             self.lessons_index.write_text("schema_version: 1\nlessons: []\n", encoding="utf-8")
 
         if not self.state.is_file():
-            self.write_state({"schema_version": 1, "current_phase": 1})
+            self.write_state({"schema_version": 1, "current_phase": "1"})
 
     def write_state(self, payload: dict[str, Any]) -> None:
         self.state.write_text(

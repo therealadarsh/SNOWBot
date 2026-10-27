@@ -118,10 +118,14 @@ def update() -> None:
 
 @app.command("validate")
 def validate(
-    phase: Annotated[int, typer.Option("--phase", help="Phase number to validate.")],
+    phase: Annotated[str, typer.Option("--phase", help="Phase id (e.g. 1, 1b, 2).")],
     pr: Annotated[
         str | None,
         typer.Option("--pr", help="Optional PR URL for the validation report."),
+    ] = None,
+    base_ref: Annotated[
+        str | None,
+        typer.Option("--base-ref", help="Git ref for anti-gaming diff analysis."),
     ] = None,
     dry_run: Annotated[bool, typer.Option("--dry-run", help="Run checks without writing.")] = False,
     config: Annotated[
@@ -130,7 +134,7 @@ def validate(
     ] = None,
 ) -> None:
     """Run phase validator checks and write a report under ``.snowbot/memory/validation/``."""
-    cmd_validate(phase=phase, pr=pr, dry_run=dry_run, config=config)
+    cmd_validate(phase=phase, pr=pr, base_ref=base_ref, dry_run=dry_run, config=config)
 
 
 @app.command()

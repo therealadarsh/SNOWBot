@@ -21,7 +21,7 @@ def test_validation_writes_report(tmp_path: Path) -> None:
     (root / "tests").mkdir()
     (root / "tests" / "test_cli.py").write_text("t", encoding="utf-8")
     layout = MemoryLayout.from_project_root(root)
-    result = run_phase_validation(layout, 1, pr_url="https://example.com/pr/1")
+    result = run_phase_validation(layout, "1", pr_url="https://example.com/pr/1")
     assert result.passed
     assert (layout.validation_dir / "phase-1-latest.md").is_file()
     assert list(layout.stops_dir.glob("*.json")) == []

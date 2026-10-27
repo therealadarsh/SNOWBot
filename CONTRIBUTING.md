@@ -31,9 +31,27 @@ pytest --cov=snowbot --cov-fail-under=85
 
 Rebase onto `main` and update `CHANGELOG.md` (Unreleased) and `STATUS.md` when behavior or scope changes.
 
+## Independent validation
+
+Implementers run local gates first. Before marking a PR **ready for review**, an independent validator (separate agent or human with fresh context) must run:
+
+```bash
+export SNOWBOT_VALIDATE_BASE=origin/main   # PR merge base
+export PR_URL=https://github.com/therealadarsh/SNOWBot/pull/N
+./scripts/independent_validate.sh
+```
+
+See [docs/INDEPENDENT_VALIDATION.md](docs/INDEPENDENT_VALIDATION.md). Do not trust the PR description alone.
+
+## Anti-gaming
+
+See [AGENTS.md](AGENTS.md). Governance changes (validator, checklist, CI, coverage/mypy/ruff config, `AGENTS.md`) belong in PRs labeled **`governance`** with CODEOWNERS approval — not mixed with feature PRs.
+
 ## Pull requests
 
-Use the PR template checklist. PR titles must follow Conventional Commits (see `.github/workflows/pr-title.yml`).
+Use the PR template checklist (validation verdict at top). PR titles must follow Conventional Commits (see `.github/workflows/pr-title.yml`).
+
+**Merge policy:** human approval required; no auto-merge.
 
 ## Security
 

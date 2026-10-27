@@ -25,5 +25,5 @@ def test_onboard_and_gate(tmp_path: Path) -> None:
     hooks = StageHooks(layout)
     pack = hooks.at_stage_start("scaffold", dry_run=True)
     assert "Validator role" in pack
-    result = hooks.validator_gate(1, dry_run=True)
+    result = hooks.validator_gate("1", dry_run=True)
     assert result.passed

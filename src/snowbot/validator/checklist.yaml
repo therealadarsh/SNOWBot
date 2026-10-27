@@ -1,6 +1,6 @@
 schema_version: 1
 phases:
-  1:
+  "1":
     title: Phase 1 scaffold
     checks:
       - id: agents_md
@@ -32,7 +32,10 @@ phases:
         kind: file_contains
         path: CHANGELOG.md
         needle: "## [Unreleased]"
-  2:
+      - id: anti_gaming
+        description: Diff must not weaken tests, thresholds, or mix governance edits
+        kind: anti_gaming_diff
+  "1b":
     title: Phase 1b validator and lessons
     checks:
       - id: memory_layout
@@ -56,3 +59,6 @@ phases:
         kind: playbook_line_cap
         path: .snowbot/memory/PLAYBOOK.md
         max_lines: 150
+      - id: anti_gaming
+        description: Diff must not weaken tests, thresholds, or mix governance edits
+        kind: anti_gaming_diff

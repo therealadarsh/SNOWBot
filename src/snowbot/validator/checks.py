@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import Any
 
 from snowbot.lessons.digest import PLAYBOOK_MAX_LINES
+from snowbot.validator.antigaming import run_anti_gaming
+from snowbot.validator.context import CheckContext
 
 
 @dataclass(frozen=True)
@@ -38,26 +40,44 @@ def parse_check(raw: dict[str, Any]) -> CheckSpec:
     )
 
 
-def run_check(root: Path, spec: CheckSpec) -> CheckOutcome:
+def run_check(
+    root: Path,
+    spec: CheckSpec,
+    *,
+    context: CheckContext | None = None,
+) -> CheckOutcome:
+    ctx = context or CheckContext()
     runner = _CHECK_RUNNERS.get(spec.kind)
     if runner is None:
         return CheckOutcome(spec, False, f"Unknown check kind: {spec.kind}")
-    return runner(root, spec)
+    return runner(root, spec, ctx)
 
 
-def _file_exists(root: Path, spec: CheckSpec) -> CheckOutcome:
+def _anti_gaming_diff(root: Path, spec: CheckSpec, ctx: CheckContext) -> CheckOutcome:
+    outcome = run_anti_gaming(root, ctx.base_ref, diff_override=ctx.diff_override)
+    if outcome.passed:
+        return CheckOutcome(spec, True, "No anti-gaming findings in diff")
+    first = outcome.findings[0]
+    return CheckOutcome(
+        spec,
+        False,
+        f"{first.code}: {first.message} ({len(outcome.findings)} finding(s))",
+    )
+
+
+def _file_exists(root: Path, spec: CheckSpec, _ctx: CheckContext) -> CheckOutcome:
     target = root / spec.path
     ok = target.is_file()
     return CheckOutcome(spec, ok, f"{'Found' if ok else 'Missing'} {spec.path}")
 
 
-def _dir_exists(root: Path, spec: CheckSpec) -> CheckOutcome:
+def _dir_exists(root: Path, spec: CheckSpec, _ctx: CheckContext) -> CheckOutcome:
     target = root / spec.path
     ok = target.is_dir()
     return CheckOutcome(spec, ok, f"{'Found' if ok else 'Missing'} directory {spec.path}")
 
 
-def _file_nonempty(root: Path, spec: CheckSpec) -> CheckOutcome:
+def _file_nonempty(root: Path, spec: CheckSpec, _ctx: CheckContext) -> CheckOutcome:
     target = root / spec.path
     if not target.is_file():
         return CheckOutcome(spec, False, f"Missing {spec.path}")
@@ -66,7 +86,7 @@ def _file_nonempty(root: Path, spec: CheckSpec) -> CheckOutcome:
     return CheckOutcome(spec, ok, f"{spec.path} {'non-empty' if ok else 'empty'}")
 
 
-def _file_contains(root: Path, spec: CheckSpec) -> CheckOutcome:
+def _file_contains(root: Path, spec: CheckSpec, _ctx: CheckContext) -> CheckOutcome:
     target = root / spec.path
     if not target.is_file():
         return CheckOutcome(spec, False, f"Missing {spec.path}")
@@ -78,7 +98,7 @@ def _file_contains(root: Path, spec: CheckSpec) -> CheckOutcome:
     )
 
 
-def _playbook_line_cap(root: Path, spec: CheckSpec) -> CheckOutcome:
+def _playbook_line_cap(root: Path, spec: CheckSpec, _ctx: CheckContext) -> CheckOutcome:
     target = root / spec.path
     if not target.is_file():
         return CheckOutcome(spec, True, f"{spec.path} not present (skipped)")
@@ -91,10 +111,11 @@ def _playbook_line_cap(root: Path, spec: CheckSpec) -> CheckOutcome:
     )
 
 
-_CHECK_RUNNERS: dict[str, Callable[[Path, CheckSpec], CheckOutcome]] = {
+_CHECK_RUNNERS: dict[str, Callable[[Path, CheckSpec, CheckContext], CheckOutcome]] = {
     "file_exists": _file_exists,
     "dir_exists": _dir_exists,
     "file_nonempty": _file_nonempty,
     "file_contains": _file_contains,
     "playbook_line_cap": _playbook_line_cap,
+    "anti_gaming_diff": _anti_gaming_diff,
 }

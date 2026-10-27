@@ -27,7 +27,7 @@ def capture_stop_event(
     layout: MemoryLayout,
     kind: StopKind,
     *,
-    phase: int | None = None,
+    phase: str | None = None,
     detail: str = "",
     metadata: dict[str, Any] | None = None,
     dry_run: bool = False,
