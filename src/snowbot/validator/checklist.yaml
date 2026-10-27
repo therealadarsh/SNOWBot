@@ -1,0 +1,58 @@
+schema_version: 1
+phases:
+  1:
+    title: Phase 1 scaffold
+    checks:
+      - id: agents_md
+        description: AGENTS.md exists at repo root
+        kind: file_exists
+        path: AGENTS.md
+      - id: status_md
+        description: STATUS.md tracks phase scope
+        kind: file_exists
+        path: STATUS.md
+      - id: pyproject
+        description: Python packaging via pyproject.toml
+        kind: file_exists
+        path: pyproject.toml
+      - id: src_package
+        description: snowbot package under src/
+        kind: file_exists
+        path: src/snowbot/cli.py
+      - id: tests_tree
+        description: tests/ mirrors package layout
+        kind: file_exists
+        path: tests/test_cli.py
+      - id: open_questions
+        description: OPEN_QUESTIONS.md documents unverified APIs
+        kind: file_nonempty
+        path: docs/OPEN_QUESTIONS.md
+      - id: changelog
+        description: CHANGELOG Unreleased section present
+        kind: file_contains
+        path: CHANGELOG.md
+        needle: "## [Unreleased]"
+  2:
+    title: Phase 1b validator and lessons
+    checks:
+      - id: memory_layout
+        description: Shared memory tree exists
+        kind: dir_exists
+        path: .snowbot/memory
+      - id: validator_module
+        description: Validator package present
+        kind: file_exists
+        path: src/snowbot/validator/runner.py
+      - id: lessons_module
+        description: Lessons package present
+        kind: file_exists
+        path: src/snowbot/lessons/store.py
+      - id: lessons_index
+        description: Lessons INDEX.yaml maintained
+        kind: file_exists
+        path: .snowbot/memory/lessons/INDEX.yaml
+      - id: playbook_cap
+        description: PLAYBOOK.md within 150 lines when present
+        kind: playbook_line_cap
+        path: .snowbot/memory/PLAYBOOK.md
+        max_lines: 150
