@@ -1,4 +1,4 @@
-name: Architect Gate
+name: architect-gate
 
 on:
   pull_request:
