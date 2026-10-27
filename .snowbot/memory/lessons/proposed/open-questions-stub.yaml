@@ -1,0 +1,14 @@
+id: lsn-open-q
+title: Keep OPEN_QUESTIONS.md for unverified APIs
+body: |
+  Document Cursor API unknowns in docs/OPEN_QUESTIONS.md instead of guessing in code.
+  Update the file whenever adapter behavior is assumed without verification.
+status: proposed
+evidence:
+  - kind: file
+    ref: docs/OPEN_QUESTIONS.md
+    summary: Phase 1 stub listing unverified Cursor API items
+dedupe_key: open-questions-md
+tags:
+  - docs
+  - cursor

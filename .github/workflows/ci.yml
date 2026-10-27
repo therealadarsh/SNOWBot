@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
@@ -40,3 +40,6 @@ jobs:
 
       - name: Pytest with coverage
         run: pytest --cov=snowbot --cov-report=term-missing --cov-fail-under=85
+
+      - name: Memory status check
+        run: snowbot status --check

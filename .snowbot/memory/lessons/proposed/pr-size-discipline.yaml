@@ -1,0 +1,17 @@
+id: lsn-pr-size
+title: Keep PRs reviewable with validator gates
+body: |
+  Run `snowbot validate --phase N` before opening PRs. Split work when diffs grow beyond a single
+  phase scope to keep reviewer and CI signal meaningful.
+status: proposed
+evidence:
+  - kind: process
+    ref: CONTRIBUTING.md
+    summary: Quality gates and Conventional Commits
+  - kind: pr
+    ref: https://github.com/therealadarsh/SNOWBot/pull/1
+    summary: Phase 1 scaffold PR size baseline
+dedupe_key: pr-size-discipline
+tags:
+  - process
+  - ci

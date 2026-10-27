@@ -7,6 +7,7 @@ project:
   root: .
   agents_file: AGENTS.md
   context_dir: .cursor
+  memory_dir: .snowbot/memory
 pipeline:
   setup_branch: chore/snowbot-setup
   spec_path: docs/pipeline-spec.yaml
