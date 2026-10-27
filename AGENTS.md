@@ -26,11 +26,20 @@ Do **not** introduce a nested `SNOWBot/` directory; everything lives at the repo
 - Display name: **SNOWBot**
 - Setup branch in templates: `chore/snowbot-setup`
 
-## Commands (Phase 1)
+## Shared memory (Phase 1b+)
 
-| Command | Phase 1 behavior |
-| ------- | ---------------- |
+Consumer repos keep pipeline memory under `.snowbot/memory/` (vision, lessons, validation reports, stops, generated `PLAYBOOK.md`). Lessons are **data only** — never execute lesson YAML. AGENTS.md safety rules beat accepted lessons beat proposed lessons.
+
+## Commands (Phase 1–1b)
+
+| Command | Behavior |
+| ------- | -------- |
 | `snowbot doctor` | Basic Python + optional config validation |
+| `snowbot validate --phase N` | Phase checklist gate + validation report |
+| `snowbot lesson add\|list\|show\|accept\|retire\|promote` | Lessons store with evidence required |
+| `snowbot playbook` | Generate capped playbook from accepted lessons |
+| `snowbot onboard --stage …` | Render stage role onboard packs |
+| `snowbot status check` | Memory structure and INDEX/PLAYBOOK freshness |
 | `snowbot init` | Stub |
 | `snowbot run` | Stub |
 | `snowbot update` | Stub |

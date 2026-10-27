@@ -8,14 +8,23 @@
 
 | Phase | Scope | Status |
 | ----- | ----- | ------ |
-| 1 | Scaffold, models, errors, logging, tests, CI, repo meta | In progress (this PR) |
+| 1 | Scaffold, models, errors, logging, tests, CI, repo meta | In review (PR #1) |
+| 1b | Phase validator + shared lessons memory | In progress |
 | 2 | `doctor` command and environment checks | Not started |
 | 3 | Backend adapters (Cursor first) | Not started |
 | 4 | `init`, VCS, Jinja2 templates | Not started |
 | 5 | `run` pipeline orchestrator | Not started |
 | 6 | `update`, hardening, release docs | Not started |
 
-## Phase 1 deliverables (current)
+## Phase 1b deliverables (current)
+
+- Shared memory tree under `.snowbot/memory/` (vision, state, lessons, validation, stops, generated playbook).
+- `snowbot validate --phase N`, `snowbot lesson …`, `snowbot playbook`, `snowbot onboard`, `snowbot status check`.
+- Packages: `snowbot.validator`, `snowbot.lessons`, `snowbot.memory`, pipeline stage hooks and role templates.
+- Stop-event capture for validator failure, gate rejection, retries, CI failure, and human lesson adds.
+- CI runs `snowbot status --check` after tests.
+
+## Phase 1 deliverables (baseline)
 
 - Editable install: `pip install -e ".[dev]"`.
 - CLI entrypoint `snowbot` with subcommands:
@@ -37,6 +46,7 @@
 
 - Setup branch name in templates/docs: `chore/snowbot-setup`
 - Agent guidance file: `AGENTS.md`
+- Shared memory directory: `.snowbot/memory/`
 
 ## Open questions
 

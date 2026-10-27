@@ -40,3 +40,6 @@ jobs:
 
       - name: Pytest with coverage
         run: pytest --cov=snowbot --cov-report=term-missing --cov-fail-under=85
+
+      - name: Memory status check
+        run: snowbot status --check
