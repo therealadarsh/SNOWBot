@@ -38,6 +38,10 @@
 - Setup branch name in templates/docs: `chore/snowbot-setup`
 - Agent guidance file: `AGENTS.md`
 
+## Governance (repo admin)
+
+Branch rules, required checks, and Dependency graph are documented for the owner in [docs/BRANCH_PROTECTION.md](docs/BRANCH_PROTECTION.md) and [docs/GITHUB_SETUP.md](docs/GITHUB_SETUP.md). Agents cannot edit GitHub rulesets or merge governance PRs.
+
 ## Open questions
 
 See [docs/OPEN_QUESTIONS.md](docs/OPEN_QUESTIONS.md) for unverified Cursor API details.

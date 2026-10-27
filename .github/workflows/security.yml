@@ -14,6 +14,8 @@ jobs:
   dependency-review:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    # Requires Settings → Security → Dependency graph. Not a branch-protection check until enabled.
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/dependency-review-action@v5

@@ -9,6 +9,8 @@ permissions:
 
 jobs:
   conventional-commit:
+    # Dependabot uses titles like "Build(deps): ..." that need not block on semantic PR rules.
+    if: github.actor != 'dependabot[bot]' && github.actor != 'app/dependabot'
     runs-on: ubuntu-latest
     steps:
       - uses: amannn/action-semantic-pull-request@v5
