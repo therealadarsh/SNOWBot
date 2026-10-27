@@ -1,0 +1,22 @@
+name: Bug report
+description: Report incorrect CLI behavior, crashes, or bad docs
+title: "[bug]: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Include command, flags, and expected vs actual behavior.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: snowbot version
+      placeholder: "0.1.0"
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs (redact secrets)
+      description: Paste relevant output; secrets should already be redacted when using default logging.
