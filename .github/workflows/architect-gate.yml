@@ -28,31 +28,33 @@ jobs:
       - name: Resolve validation phase
         id: phase
         env:
+          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ' ') }}
+          PR_BODY: ${{ github.event.pull_request.body }}
           DEFAULT_GOVERNANCE_PHASE: "1b"
         run: |
           set -euo pipefail
-          phase=""
-          labels="${{ join(github.event.pull_request.labels.*.name, ',') }}"
-          for raw in ${labels//,/ }; do
-            case "$raw" in
-              phase:*)
-                phase="${raw#phase:}"
-                ;;
-            esac
-          done
-          if [[ -z "$phase" ]] && echo "$labels" | grep -qw 'governance'; then
-            phase="$DEFAULT_GOVERNANCE_PHASE"
-          fi
-          if [[ -z "$phase" ]]; then
-            body_file="$RUNNER_TEMP/pr-body.txt"
-            printf '%s' "${{ github.event.pull_request.body }}" > "$body_file"
-            if grep -Eiq '^[[:space:]]*Phase:[[:space:]]*([0-9]+[a-z]?)' "$body_file"; then
-              phase="$(grep -Eio '^[[:space:]]*Phase:[[:space:]]*([0-9]+[a-z]?)' "$body_file" | head -1 | sed -E 's/.*:[[:space:]]*//')"
-            fi
-          fi
-          if [[ -z "$phase" ]]; then
-            phase="1b"
-          fi
+          phase="$(python3 - <<'PY'
+          import os
+          import re
+
+          labels = [x for x in os.environ.get("PR_LABELS", "").split() if x]
+          phase = ""
+          for label in labels:
+              if label.startswith("phase:"):
+                  phase = label.split(":", 1)[1]
+                  break
+          if not phase and "governance" in labels:
+              phase = os.environ.get("DEFAULT_GOVERNANCE_PHASE", "1b")
+          if not phase:
+              body = os.environ.get("PR_BODY") or ""
+              match = re.search(r"(?im)^[ \t]*Phase:[ \t]*([0-9]+[a-z]?)", body)
+              if match:
+                  phase = match.group(1)
+          if not phase:
+              phase = "1b"
+          print(phase, end="")
+          PY
+          )"
           echo "id=$phase" >> "$GITHUB_OUTPUT"
           echo "Resolved phase: $phase"
 
@@ -104,7 +106,7 @@ jobs:
             snowbot status --check
           }
 
-          if git show origin/main:scripts/independent_validate.sh >/dev/null 2>&1; then
+          if [[ -f scripts/independent_validate.sh ]]; then
             chmod +x scripts/independent_validate.sh
             set +e
             script_out="$(./scripts/independent_validate.sh 2>&1)"

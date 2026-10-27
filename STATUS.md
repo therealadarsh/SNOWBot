@@ -54,6 +54,10 @@ Phase ids are strings (`"1"`, `"1b"`, `"2"`, …). Phase **1b** is not phase **2
 - Agent guidance file: `AGENTS.md`
 - Shared memory directory: `.snowbot/memory/`
 
+## Governance (repo admin)
+
+Branch rules, required checks, and Dependency graph are documented for the owner in [docs/BRANCH_PROTECTION.md](docs/BRANCH_PROTECTION.md) and [docs/GITHUB_SETUP.md](docs/GITHUB_SETUP.md). Agents cannot edit GitHub rulesets or merge governance PRs.
+
 ## Open questions
 
 See [docs/OPEN_QUESTIONS.md](docs/OPEN_QUESTIONS.md) for unverified Cursor API details.
