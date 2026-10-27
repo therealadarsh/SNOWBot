@@ -12,6 +12,12 @@ GOVERNANCE_PATH_PREFIXES: tuple[str, ...] = (
     "CONTRIBUTING.md",
     ".github/workflows/",
     "src/snowbot/validator/",
+    "src/snowbot/templates/",
+    "docs/ARCHITECT_GATE.md",
+    "docs/GITHUB_SETUP.md",
+    "docs/INDEPENDENT_VALIDATION.md",
+    "docs/BRANCH_PROTECTION.md",
+    "scripts/independent_validate.sh",
     ".pre-commit-config.yaml",
 )
 

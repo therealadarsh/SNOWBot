@@ -7,7 +7,10 @@ Phase PRs must pass **independent validation** before they are marked ready for 
 | Role | Context | Responsibility |
 | ---- | ------- | -------------- |
 | Implementer | Full task history | Code, tests, docs; run local ruff/mypy/pytest |
-| Validator | Fresh context only | Re-run gates; do not trust PR description |
+| Validator / **Senior Software Architect** | Fresh context only | Re-run gates; do not trust PR description |
+| **CI `architect-gate`** | GitHub Actions on PR head | Same gates as the architect persona; blocks merge when required |
+
+The architect agent **is** the validator: template `src/snowbot/templates/roles/architect.md.j2`, automation in `.github/workflows/architect-gate.yml`. No separate GitHub approval bot is required in [simple mode](GITHUB_SETUP.md).
 
 ## Validator inputs (allowlist)
 
@@ -45,6 +48,8 @@ snowbot status --check
 | `pass_with_notes` | Mark ready; include notes (e.g. documented bootstrap exception) |
 | `fail` | Keep PR **draft**; write stop event + proposed lesson; fix (max 2 rounds) |
 
-## Human merge gate
+## Merge gate
 
-`merge_policy: human approval` — no auto-merge. Reviewers use the 2-minute template at the top of the PR (verdict, summary, risks).
+**Simple mode:** merge when required checks are green, including **`architect-gate`** — see [ARCHITECT_GATE.md](ARCHITECT_GATE.md). Optional human review; not a substitute for the architect CI job.
+
+Emergency: label `skip-architect` (document why).
