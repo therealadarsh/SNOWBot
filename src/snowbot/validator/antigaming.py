@@ -29,6 +29,11 @@ GOVERNANCE_PYPROJECT_KEYS: tuple[str, ...] = (
     "tool.pytest",
 )
 
+# Fixture diffs intentionally contain gaming patterns for unit tests.
+DIFF_EXCLUDE_PREFIXES: tuple[str, ...] = ("tests/validator/fixtures/",)
+# This module's diff contains literal patterns the scanner searches for.
+DIFF_EXCLUDE_FILES: tuple[str, ...] = ("src/snowbot/validator/antigaming.py",)
+
 
 @dataclass(frozen=True)
 class AntiGamingFinding:
@@ -64,9 +69,35 @@ def collect_git_diff(root: Path, base_ref: str | None) -> str:
     return proc.stdout
 
 
+def filter_diff_paths(
+    diff_text: str,
+    exclude_prefixes: tuple[str, ...] = DIFF_EXCLUDE_PREFIXES,
+    exclude_files: tuple[str, ...] = DIFF_EXCLUDE_FILES,
+) -> str:
+    """Drop diff hunks for excluded paths (e.g. anti-gaming test fixtures)."""
+    if not diff_text.strip():
+        return diff_text
+    parts = re.split(r"(?=^diff --git )", diff_text, flags=re.M)
+    kept: list[str] = []
+    for part in parts:
+        if not part.strip():
+            continue
+        path_a = re.search(r"^diff --git a/(\S+)", part, re.M)
+        path_b = re.search(r"^diff --git a/\S+ b/(\S+)", part, re.M)
+        left = path_a.group(1) if path_a else ""
+        right = path_b.group(1) if path_b else ""
+        path = left if left != "dev/null" else right
+        if path and path != "dev/null":
+            if path in exclude_files or any(path.startswith(prefix) for prefix in exclude_prefixes):
+                continue
+        kept.append(part)
+    return "".join(kept)
+
+
 def analyze_diff(diff_text: str) -> AntiGamingResult:
     """Scan a unified diff for disallowed weakening patterns."""
     result = AntiGamingResult()
+    diff_text = filter_diff_paths(diff_text)
     if not diff_text.strip():
         return result
 
@@ -118,11 +149,13 @@ def _check_fail_under_lowered(diff: str, result: AntiGamingResult) -> None:
 
 
 def _check_pytest_skips(diff: str, result: AntiGamingResult) -> None:
+    marker = re.compile(r"@pytest\.mark\.(skip|xfail)\b|pytest\.mark\.(skip|xfail)\(")
     for line in diff.splitlines():
         if not line.startswith("+"):
             continue
-        if "pytest.mark.skip" in line or "pytest.mark.xfail" in line:
-            snippet = line[1:].strip()
+        body = line[1:]
+        if marker.search(body):
+            snippet = body.strip()
             result.findings.append(
                 AntiGamingFinding("pytest_skip_added", f"Added skip/xfail marker: {snippet}")
             )
