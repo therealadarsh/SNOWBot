@@ -1,0 +1,10 @@
+schema_version: 1
+items:
+  - id: SN-1
+    title: Phase 1 scaffold and models
+    phase: scaffold
+    status: in_progress
+  - id: SN-2
+    title: Phase 2 doctor command and checks
+    phase: doctor
+    status: pending
