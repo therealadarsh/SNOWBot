@@ -30,6 +30,7 @@ from research.policy import Policy
 from research.record import append_jsonl, write_record
 from research.sandbox import DockerSandbox, HostProxy, LocalSubprocessSandbox, ProcessResult
 from research.tasks.build import Task, materialize
+from research.versioning import current_version_string, parse_semver
 
 Agent = Callable[["RunContext"], None]
 
@@ -169,6 +170,7 @@ def run_cell(
     on_attempt_flushed: Callable[[RunContext], None] | None = None,
     proxy: HostProxy | None = None,
     use_docker: bool = False,
+    version: str | None = None,
 ) -> Path:
     cell_dir = run_dir / cell_id
     workspace = cell_dir / "workspace"
@@ -213,8 +215,11 @@ def run_cell(
         tests_passed=tests_passed,
         rules=rules,
     )
+    resolved_version = current_version_string() if version is None else version
+    parse_semver(resolved_version)
     record = {
         "record_version": 1,
+        "version": resolved_version,
         "cell_id": cell_id,
         "task_id": task.id,
         "condition_id": condition.id,

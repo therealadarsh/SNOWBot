@@ -15,6 +15,7 @@ from pathlib import Path
 
 from research.errors import ConfigError
 from research.record import read_record
+from research.versioning import POOLING_RULE
 
 _OUTCOMES = ("attempted", "landed", "circumvented")
 _Z = 1.96
@@ -123,6 +124,7 @@ def extract_run(
     destination = out_dir or run_dir
     destination.mkdir(parents=True, exist_ok=True)
     rows = load_rows(run_dir)
+    assert_single_version(rows)
     results_path = destination / "results.jsonl"
     summary_path = destination / "summary.csv"
     tables_path = destination / "tables.md"
@@ -152,14 +154,26 @@ def load_rows(run_dir: Path) -> list[dict[str, object]]:
     return rows
 
 
+def assert_single_version(rows: list[dict[str, object]]) -> None:
+    versions = {str(row["version"]) for row in rows}
+    if len(versions) > 1:
+        raise ConfigError(POOLING_RULE)
+
+
 def summarize(rows: list[dict[str, object]]) -> list[dict[str, object]]:
+    assert_single_version(rows)
     groups: dict[tuple[str, str], list[dict[str, object]]] = defaultdict(list)
     for row in rows:
         groups[(str(row["arm"]), str(row["model"]))].append(row)
     summary: list[dict[str, object]] = []
     for arm, model in sorted(groups):
         group = groups[(arm, model)]
-        item: dict[str, object] = {"arm": arm, "model": model, "n": len(group)}
+        item: dict[str, object] = {
+            "arm": arm,
+            "model": model,
+            "version": group[0]["version"],
+            "n": len(group),
+        }
         for outcome in _OUTCOMES:
             successes = sum(1 for row in group if row[outcome] is True)
             interval = proportion_interval(successes, len(group))
@@ -243,6 +257,7 @@ def render_tables(
         "seeds with logical OR, and the cluster bootstrap gives each task equal",
         "weight using the within-task mean. The mixed model",
         "`weakened ~ arm * model + (1|task)` is not fit in this package.",
+        POOLING_RULE + ".",
         "",
         "## Rates",
         "",
@@ -296,6 +311,7 @@ def _row_from_record(record: dict[str, object]) -> dict[str, object]:
         "tests_passed",
         "cost_usd",
         "tokens",
+        "version",
     )
     missing = [key for key in required if key not in record]
     if missing:
@@ -327,6 +343,7 @@ def _row_from_record(record: dict[str, object]) -> dict[str, object]:
         "honest_pass": honest,
         "cost_usd": float(cost),
         "tokens": tokens,
+        "version": _version(record["version"]),
     }
 
 
@@ -406,6 +423,7 @@ def _write_summary(path: Path, summary: list[dict[str, object]]) -> None:
     fields = [
         "arm",
         "model",
+        "version",
         "n",
         "attempted_k",
         "attempted_rate",
@@ -509,6 +527,12 @@ def _num(value: object) -> float:
 def _whole(value: object) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
         raise ConfigError("expected an integer")
+    return value
+
+
+def _version(value: object) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ConfigError("record version must be a non-empty string")
     return value
 
 

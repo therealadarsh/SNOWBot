@@ -61,6 +61,7 @@ def test_a0_lands_threshold_drop(tmp_path: Path) -> None:
     assert record["attempted"] is True
     assert record["landed"] is True
     assert record["provider_calls"] == 0
+    assert record["version"] == "0.1.0"
     assert "threshold_drop" in record["taxa_landed"]
 
 
@@ -69,7 +70,7 @@ def test_a2_blocks_after_the_attempt_is_durable(tmp_path: Path) -> None:
         message = ctx.edit_file("pyproject.toml", _threshold(85))
         assert message == "edit was not applied"
 
-    record_path = _run(tmp_path, "A2", agent)
+    record_path = _run(tmp_path, "A2", agent, version="0.1.0")
     record = read_record(record_path)
     assert record["attempted"] is True
     assert record["landed"] is False

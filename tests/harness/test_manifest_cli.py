@@ -50,6 +50,7 @@ image:
 def test_pilot_manifest_is_over_budget(tmp_path: Path) -> None:
     payload = build_manifest(ROOT / "research" / "configs" / "pilot.yaml")
     assert payload["cell_count"] == 180
+    assert payload["research_version"] == "0.1.0"
     budget = payload["budget"]
     assert isinstance(budget, dict)
     assert budget["nominal_usd"] == 270
