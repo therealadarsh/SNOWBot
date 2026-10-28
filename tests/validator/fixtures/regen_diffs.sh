@@ -23,3 +23,4 @@ mk weakened_assert "$BEFORE_CALC" 'printf "def test_add():\n    assert True\n" >
 mk unittest_skip "$BEFORE_CALC" 'printf "@unittest.skip(\"flaky\")\ndef test_add():\n    assert add(2, 2) == 4\n" > tests/test_calc.py'
 mk importorskip "$BEFORE_CALC" 'printf "def test_add():\n    pytest.importorskip(\"calc_backend\")\n    assert add(2, 2) == 4\n" > tests/test_calc.py'
 mk pragma_no_cover "$BEFORE_CALC" 'printf "def run():\n    return fallback()  # pragma: no cover\n" > src/snowbot/mod.py'
+mk pragma_in_docs "$BEFORE_CALC; printf '# Changelog\n' > CHANGELOG.md" 'printf "# Changelog\n- documents the pragma: no cover exclusion\n" > CHANGELOG.md; sed -i.bak "s/pragma: no cover/# pragma: no cover/" CHANGELOG.md; rm -f CHANGELOG.md.bak'

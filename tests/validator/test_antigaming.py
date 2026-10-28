@@ -42,6 +42,11 @@ def test_validator_check_uses_diff_override(tmp_path: Path) -> None:
     assert not outcome.passed
 
 
+def test_pragma_mentioned_in_docs_is_not_flagged() -> None:
+    diff = (FIXTURES / "pragma_in_docs.diff").read_text(encoding="utf-8")
+    assert analyze_diff(diff).passed
+
+
 def test_clean_diff_passes() -> None:
     assert analyze_diff("").passed
 

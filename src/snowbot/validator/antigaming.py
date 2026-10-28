@@ -215,7 +215,7 @@ def _check_assertion_weakened(diff: str, result: AntiGamingResult) -> None:
 def _check_coverage_pragma(diff: str, result: AntiGamingResult) -> None:
     pragma = re.compile(r"#\s*pragma:\s*no\s*cover", re.I)
     for path, text in _added_lines(diff):
-        if pragma.search(text):
+        if path.endswith(".py") and pragma.search(text):
             result.findings.append(
                 AntiGamingFinding(
                     "coverage_pragma_added",
