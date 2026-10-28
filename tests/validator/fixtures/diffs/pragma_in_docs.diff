@@ -1,0 +1,7 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 825c32f..f583fce 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -1 +1,2 @@
+ # Changelog
++- documents the # pragma: no cover exclusion

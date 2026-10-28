@@ -19,6 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Repository metadata: CONTRIBUTING, SECURITY, AGENTS.md, ADRs, branch protection docs/script, GitHub templates, Dependabot, CODEOWNERS.
 - Example root `snowbot.yaml`, `docs/pipeline-spec.yaml`, and `docs/backlog.yaml`.
 
+### Fixed
+
+- Anti-gaming scanner now detects real `git diff` test-file deletions (`+++ /dev/null`; the old `b/dev/null` pattern never matched git output) and flags tautological test assertions (`assert True`/`assert 1`), `unittest.skip`/`pytest.skip`/`pytest.importorskip`, and added `# pragma: no cover`. Fixtures are regenerated from real git output (`tests/validator/fixtures/regen_diffs.sh`).
+
 ### Changed
 
 - `.github/CODEOWNERS`: restore Phase 1b governance paths (workflows, packaging, validator, contributor docs).
