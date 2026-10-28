@@ -10,10 +10,13 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from datetime import date
 from pathlib import Path
 
+from research.archive import archive_version, preserve_current_version
 from research.budget import RunBudget, budget_allows
 from research.conditions import load_conditions
+from research.drift import check_drift
 from research.errors import (
     BudgetError,
     ConfigError,
@@ -22,10 +25,15 @@ from research.errors import (
     ImmutableRecordError,
     ResearchError,
 )
+from research.jsonio import load_json_object
+from research.ledger import evaluate_caps, load_ledger, spend_allowed
 from research.manifest import build_manifest, load_manifest, write_manifest
 from research.oracle import load_oracle_rules
 from research.runner import noop_agent, run_cell
+from research.stability import evaluate_stability
+from research.status import load_status
 from research.tasks.build import load_catalog
+from research.versioning import current_version_string, verify_freeze
 from research.yamlio import as_mapping, as_str, load_yaml
 
 _LIVE_AGENTS = frozenset({"claude-code", "codex", "inspect"})
@@ -50,6 +58,45 @@ def main(argv: list[str] | None = None) -> int:
     extract.add_argument("--run-dir", required=True, type=Path)
     extract.add_argument("--out-dir", type=Path)
 
+    version = sub.add_parser("version", help="show or check the frozen research version")
+    version.add_argument("--root", type=Path, default=Path("."))
+    version.add_argument("--check", action="store_true")
+
+    drift = sub.add_parser("drift-check", help="compare pins to upstream sources")
+    drift.add_argument("--root", type=Path, default=Path("."))
+    drift.add_argument("--dry-run", action=argparse.BooleanOptionalAction, default=True)
+    drift.add_argument("--ledger", type=Path)
+    drift.add_argument("--status", type=Path)
+    drift.add_argument("--timeout", type=float, default=5.0)
+    drift.add_argument("--retired-model", action="append", default=[])
+    drift.add_argument("--oracle-self-check", action=argparse.BooleanOptionalAction, default=True)
+    drift_infra = drift.add_mutually_exclusive_group()
+    drift_infra.add_argument("--infrastructure-failure", action="store_true")
+    drift_infra.add_argument("--infrastructure-ok", action="store_true")
+    drift_validate = drift.add_mutually_exclusive_group()
+    drift_validate.add_argument("--validate-failed", action="store_true")
+    drift_validate.add_argument("--validate-passed", action="store_true")
+
+    stability = sub.add_parser("stability", help="evaluate recorded stability inputs")
+    stability.add_argument("--input", required=True, type=Path)
+
+    caps = sub.add_parser("caps", help="evaluate spend caps without writing status")
+    caps.add_argument("--ledger", required=True, type=Path)
+    caps.add_argument("--status", type=Path)
+    caps.add_argument("--proposed-usd", type=float)
+    caps.add_argument("--today", type=date.fromisoformat)
+    caps.add_argument("--human-confirmed", action="store_true")
+
+    archive = sub.add_parser("archive", help="archive a superseded version without pushing a tag")
+    archive.add_argument("--root", type=Path, default=Path("."))
+    archive.add_argument("--old-version", required=True)
+    archive.add_argument("--new-version", required=True)
+    archive.add_argument("--why", required=True)
+    archive.add_argument("--fix-pr", required=True)
+    archive.add_argument("--on", type=date.fromisoformat)
+    archive.add_argument("--into", default="HEAD")
+    archive.add_argument("--preserve-current", action="store_true")
+
     args = parser.parse_args(argv)
     try:
         if args.command == "manifest":
@@ -58,6 +105,16 @@ def main(argv: list[str] | None = None) -> int:
             return _run(args)
         if args.command == "extract":
             return _extract(args.run_dir, args.out_dir)
+        if args.command == "version":
+            return _version(args.root, args.check)
+        if args.command == "drift-check":
+            return _drift(args)
+        if args.command == "stability":
+            return _stability(args.input)
+        if args.command == "caps":
+            return _caps(args)
+        if args.command == "archive":
+            return _archive(args)
     except (ResearchError, OSError) as exc:
         print(str(exc), file=sys.stderr)
         if isinstance(exc, HashMismatch | ImmutableRecordError):
@@ -232,3 +289,86 @@ def _as_float(value: object, label: str) -> float:
     if isinstance(value, bool) or not isinstance(value, int | float):
         raise ConfigError(f"{label} must be a number")
     return float(value)
+
+
+def _version(root: Path, check: bool) -> int:
+    if check:
+        verify_freeze(root)
+    print(current_version_string(root))
+    return 0
+
+
+def _drift(args: argparse.Namespace) -> int:
+    if args.infrastructure_failure:
+        infra: bool | None = True
+    elif args.infrastructure_ok:
+        infra = False
+    else:
+        infra = None
+    if args.validate_failed:
+        validate_failed: bool | None = True
+    elif args.validate_passed:
+        validate_failed = False
+    else:
+        validate_failed = None
+    report = check_drift(
+        args.root,
+        timeout=args.timeout,
+        ledger_path=args.ledger,
+        status_path=args.status,
+        infrastructure_failure_flag=infra,
+        retired_model_ids=list(args.retired_model),
+        validate_failed=validate_failed,
+        run_oracle_self_check=args.oracle_self_check,
+    )
+    payload = report.to_json()
+    payload["dry_run"] = bool(args.dry_run)
+    payload["applied"] = False
+    payload["opened_pr"] = False
+    sys.stdout.write(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    if not args.dry_run:
+        print(
+            "dry-run is off, but this command still does not push, merge, or open a pull request",
+            file=sys.stderr,
+        )
+    return 0
+
+
+def _stability(path: Path) -> int:
+    payload = load_json_object(path)
+    report = evaluate_stability(payload)
+    sys.stdout.write(json.dumps(report.to_json(), indent=2, sort_keys=True) + "\n")
+    return 0
+
+
+def _caps(args: argparse.Namespace) -> int:
+    ledger = load_ledger(args.ledger)
+    status = load_status(args.status) if args.status is not None else None
+    version = str(status["version"]) if status is not None else current_version_string()
+    result = evaluate_caps(
+        ledger,
+        version=version,
+        today=date.today() if args.today is None else args.today,
+        proposed_usd=args.proposed_usd,
+        status=status,
+    )
+    allowed = spend_allowed(result, human_confirmed=bool(args.human_confirmed))
+    body = {"applied": False, "spend_allowed": allowed, "status": result}
+    sys.stdout.write(json.dumps(body, indent=2, sort_keys=True) + "\n")
+    return 0
+
+
+def _archive(args: argparse.Namespace) -> int:
+    if args.preserve_current:
+        preserve_current_version(args.root)
+    result = archive_version(
+        args.root,
+        old_version=args.old_version,
+        new_version=args.new_version,
+        why=args.why,
+        fix_pr=args.fix_pr,
+        on=args.on,
+        into=args.into,
+    )
+    print(f"archived {result.destination} idempotent={result.idempotent}")
+    return 0

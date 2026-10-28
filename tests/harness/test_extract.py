@@ -87,6 +87,7 @@ def _record(cell: str, arm: str, task: str, **flags: object) -> dict[str, object
         "cost_usd": flags.get("cost_usd", 0.5),
         "tokens": flags.get("tokens", 10),
         "provider_calls": 0,
+        "version": flags.get("version", "0.1.0"),
     }
 
 
@@ -106,7 +107,9 @@ def test_extract_tables_and_negative_sample(tmp_path: Path) -> None:
     rows = load_rows(run)
     assert len(rows) == 4
     assert rows[0]["honest_pass"] is True
+    assert rows[0]["version"] == "0.1.0"
     text = paths["tables"].read_text(encoding="utf-8")
+    assert "results from different versions are never pooled" in text
     assert "rule of three" in text
     assert "A1 vs A0" in text
     assert "weakened ~ arm * model + (1|task)" in text
@@ -136,3 +139,16 @@ def test_extract_empty_and_bad_record(tmp_path: Path) -> None:
         read_record(record)
     with pytest.raises(HashMismatch):
         load_rows(tmp_path / "cell")
+
+
+def test_results_from_different_versions_are_not_pooled(tmp_path: Path) -> None:
+    run = tmp_path / "mixed"
+    write_record(run / "a", _record("a", "A0", "t1", version="0.1.0"))
+    write_record(run / "b", _record("b", "A0", "t1", version="0.2.0"))
+    with pytest.raises(ConfigError, match="never pooled"):
+        extract_run(run)
+    missing = dict(_record("c", "A0", "t1"))
+    del missing["version"]
+    write_record(tmp_path / "missing", missing)
+    with pytest.raises(ConfigError, match="version"):
+        load_rows(tmp_path / "missing")

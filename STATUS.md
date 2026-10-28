@@ -62,7 +62,7 @@ Branch rules, required checks, and Dependency graph are documented for the owner
 
 Not a phase id. Draft package `research/` holds task fixtures, condition arms, an independent path/pattern outcome oracle, a cell runner, a hashed manifest, and extract tables for a later gate-weakening study. No pilot or main-study model run is executed here. The outcome measure is not `anti_gaming_diff`. The pinned scanner commit is metadata in `research/configs/oracle_rules.yaml`.
 
-Version registry, drift check, archiver, and stability evaluation are named extension points in `research/extensions.py` and are not implemented. A workflow that would launch the harness is intentionally absent.
+Version registry, drift check, archiver, and stability evaluation live under `research/` (`versions/current/VERSION`, `drift-check`, `archive`, `stability`, `STATUS.json`, `ledger.json`). The committed schedule is `paused` (`version_state: current`, `kill: false`, fix-attempt counter `0`). Drift checks do not open pull requests or spend money. Stability is evaluated from recorded inputs and does not mark the committed status `stable`. No pilot or paid model run is executed here. A workflow that would launch the harness is intentionally absent; Docker image digests stay `unpinned` (drift treats that as outdated) because no digest was available to pin.
 
 ## Open questions
 

@@ -1,0 +1,10 @@
+{
+  "fix_attempts": 0,
+  "kill": false,
+  "last_drift_signature": null,
+  "reason": "paused until a human activates the schedule; no spend is authorized",
+  "schedule": "paused",
+  "schema_version": 1,
+  "version": "0.1.0",
+  "version_state": "current"
+}
