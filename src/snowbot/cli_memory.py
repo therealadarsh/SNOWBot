@@ -185,7 +185,11 @@ def lesson_accept(
 ) -> None:
     layout = _layout_from_cwd(config)
     store = LessonStore(layout)
-    store.accept(lesson_id, dry_run=dry_run)
+    try:
+        store.accept(lesson_id, dry_run=dry_run)
+    except LessonStoreError as exc:
+        typer.secho(str(exc), fg=typer.colors.RED)
+        raise typer.Exit(code=1) from exc
     typer.secho(f"Accepted {lesson_id}", fg=typer.colors.GREEN)
 
 
@@ -208,7 +212,11 @@ def lesson_promote(
     config: Annotated[Path | None, typer.Option(help="Path to snowbot.yaml")] = None,
 ) -> None:
     layout = _layout_from_cwd(config)
-    promote_lesson(layout, lesson_id, dry_run=dry_run)
+    try:
+        promote_lesson(layout, lesson_id, dry_run=dry_run)
+    except LessonStoreError as exc:
+        typer.secho(str(exc), fg=typer.colors.RED)
+        raise typer.Exit(code=1) from exc
     typer.secho(f"Promoted {lesson_id}", fg=typer.colors.GREEN)
 
 
