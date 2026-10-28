@@ -74,6 +74,6 @@ Checked on 2026-10-28 from primary docs, and not executed here:
 
 `haiku` is a documented Claude Code model alias used as pilot config data. It was not called. 1.50 USD is an operator cap, not a measured price.
 
-Oracle unit-test diffs are built in `tests/research/` and are not the study tasks in `research/tasks/catalog.yaml`.
+Oracle unit-test diffs are built in `tests/harness/` and are not the study tasks in `research/tasks/catalog.yaml`. The test directory is not named `research`, because pytest's console script puts `tests/` on `sys.path` and would otherwise import that directory as the package.
 
 CI in this repository lints and typechecks `src` and `snowbot` only. Workflow and `pyproject.toml` tool-table edits are out of scope for this change, so `research/` is checked by the commands in the pull request test plan rather than by those config tables.

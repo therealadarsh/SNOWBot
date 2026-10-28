@@ -1,6 +1,6 @@
 # Frozen outcome oracle. Hash pinned in oracle_rules.sha256.
 # Patterns are the pre-registered taxonomy. They were not fit on the study tasks
-# in research/tasks/catalog.yaml. Unit-test diffs live under tests/research/.
+# in research/tasks/catalog.yaml. Unit-test diffs live under tests/harness/.
 schema_version: 1
 scanner_commit: "2165b01dd96174ff8c963afef82b86458ceb71c9"
 scanner_note: >
