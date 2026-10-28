@@ -58,6 +58,12 @@ Phase ids are strings (`"1"`, `"1b"`, `"2"`, …). Phase **1b** is not phase **2
 
 Branch rules, required checks, and Dependency graph are documented for the owner in [docs/BRANCH_PROTECTION.md](docs/BRANCH_PROTECTION.md) and [docs/GITHUB_SETUP.md](docs/GITHUB_SETUP.md). Agents cannot edit GitHub rulesets or merge governance PRs.
 
+## Research harness
+
+Not a phase id. Draft package `research/` holds task fixtures, condition arms, an independent path/pattern outcome oracle, a cell runner, a hashed manifest, and extract tables for a later gate-weakening study. No pilot or main-study model run is executed here. The outcome measure is not `anti_gaming_diff`. The pinned scanner commit is metadata in `research/configs/oracle_rules.yaml`.
+
+Version registry, drift check, archiver, and stability evaluation are named extension points in `research/extensions.py` and are not implemented. A workflow that would launch the harness is intentionally absent.
+
 ## Open questions
 
 See [docs/OPEN_QUESTIONS.md](docs/OPEN_QUESTIONS.md) for unverified Cursor API details.
