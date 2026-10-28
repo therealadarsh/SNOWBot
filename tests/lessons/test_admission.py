@@ -78,10 +78,47 @@ def test_accept_refuses_real_lesson_when_evidence_file_is_missing(tmp_path: Path
 
 
 def test_accept_real_lesson_whose_evidence_is_an_existing_pull_request(tmp_path: Path) -> None:
-    """lsn-pr-size cites pull/1, which is in this repository's git history."""
+    """lsn-pr-size cites pull/1, which exists on GitHub and in a full local history."""
     config = _config(tmp_path, root=_REPO_ROOT)
     ids = _copy_real_lessons(tmp_path / "memory" / "lessons" / "proposed")
     assert "lsn-pr-size" in ids
+    result = runner.invoke(app, ["lesson", "accept", "lsn-pr-size", "--config", str(config)])
+    assert result.exit_code == 0, result.output
+
+
+def test_accept_real_pull_request_when_history_does_not_mention_it(tmp_path: Path) -> None:
+    """Shallow clones still accept the real pull/1 URL from the committed lesson."""
+    clone = tmp_path / "clone"
+    clone.mkdir()
+    subprocess.run(["git", "init"], cwd=clone, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=clone, check=True)
+    subprocess.run(["git", "config", "user.name", "test"], cwd=clone, check=True)
+    subprocess.run(
+        ["git", "commit", "--allow-empty", "-m", "shallow checkout"],
+        cwd=clone,
+        check=True,
+        capture_output=True,
+    )
+    history = subprocess.run(
+        ["git", "log", "--format=%s%n%b"],
+        cwd=clone,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert "#1" not in history.stdout
+    (clone / "CONTRIBUTING.md").write_bytes((_REPO_ROOT / "CONTRIBUTING.md").read_bytes())
+    source = (_REAL_PROPOSED / "pr-size-discipline.yaml").read_bytes()
+    assert b"https://github.com/therealadarsh/SNOWBot/pull/1" in source
+    proposed = clone / ".snowbot" / "memory" / "lessons" / "proposed"
+    proposed.mkdir(parents=True)
+    (proposed / "pr-size-discipline.yaml").write_bytes(source)
+    config = clone / "snowbot.yaml"
+    memory = clone / ".snowbot" / "memory"
+    config.write_text(
+        f"schema_version: 1\nproject:\n  root: {clone}\n  memory_dir: {memory}\n",
+        encoding="utf-8",
+    )
     result = runner.invoke(app, ["lesson", "accept", "lsn-pr-size", "--config", str(config)])
     assert result.exit_code == 0, result.output
 
