@@ -45,6 +45,7 @@ def test_accept_moves_file(tmp_path: Path) -> None:
         evidence=[LessonEvidence(ref="r")],
     )
     store.add_proposed(lesson)
+    (root / "r").write_text("evidence\n", encoding="utf-8")
     store.accept("move")
     assert (layout.lessons_accepted / "move.yaml").is_file()
     assert store.get("move").status == LessonStatus.ACCEPTED

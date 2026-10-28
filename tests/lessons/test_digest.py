@@ -22,6 +22,7 @@ def test_playbook_cap(tmp_path: Path) -> None:
         evidence=[LessonEvidence(ref="r")],
     )
     store.add_proposed(lesson)
+    (root / "r").write_text("evidence\n", encoding="utf-8")
     store.accept("big")
     content = generate_playbook(layout)
     assert len(content.splitlines()) <= PLAYBOOK_MAX_LINES

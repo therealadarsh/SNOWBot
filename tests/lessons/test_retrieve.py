@@ -29,6 +29,7 @@ def test_precedence_order(tmp_path: Path) -> None:
         evidence=[LessonEvidence(ref="r")],
     )
     store.add_proposed(accepted)
+    (root / "r").write_text("evidence\n", encoding="utf-8")
     store.accept("a1")
     ranked = retrieve_lessons(layout)
     assert ranked[0].precedence == Precedence.AGENTS_SAFETY
