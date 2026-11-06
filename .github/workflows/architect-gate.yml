@@ -85,8 +85,10 @@ jobs:
           import json, os
           from pathlib import Path
 
+          import subprocess
+
           from snowbot.memory.layout import MemoryLayout
-          from snowbot.validator.antigaming import run_anti_gaming
+          from snowbot.validator import antigaming
           from snowbot.validator.runner import run_phase_validation
 
           root = Path.cwd()
@@ -94,8 +96,16 @@ jobs:
           result = run_phase_validation(
               MemoryLayout.from_project_root(root), os.environ["PHASE"], base_ref=base
           )
-          findings = run_anti_gaming(root, base).findings
+          findings = antigaming.run_anti_gaming(root, base).findings
+          changed = subprocess.run(
+              ["git", "diff", "--name-only", "-z", f"{base}...HEAD"],
+              check=True, capture_output=True, text=True,
+          ).stdout.split("\0")
+          # Older bases lack the classifier; None makes the verdict fail closed on feature PRs.
+          classify = getattr(antigaming, "is_governance_path", None)
+          governance = sorted(p for p in changed if p and classify(p)) if classify else None
           print(json.dumps({
+              "governance_paths": governance,
               "phase": result.phase,
               "checks": [
                   {"id": o.spec.id, "kind": o.spec.kind, "passed": o.passed, "message": o.message}
@@ -126,6 +136,13 @@ jobs:
 
           failed = [c for c in gate["checks"] if not c["passed"] and c["kind"] != "anti_gaming_diff"]
           blocking, notes = [], []
+          if not governance:
+              if gate["governance_paths"] is None:
+                  blocking.append({"code": "governance_paths_unknown",
+                                   "message": "base validator cannot classify governance paths"})
+              elif gate["governance_paths"]:
+                  blocking.append({"code": "governance_path_on_feature_branch",
+                                   "message": f"only governance/ branches may change {gate['governance_paths']}"})
           for finding in gate["findings"]:
               if finding["code"] == "governance_mixed_with_product" and governance:
                   notes.append(finding)
