@@ -62,3 +62,248 @@ phases:
       - id: anti_gaming
         description: Diff must not weaken tests, thresholds, or mix governance edits
         kind: anti_gaming_diff
+  "2b":
+    title: Phase 2b change-impact tool
+    checks:
+      - id: impact_module
+        description: Impact package present
+        kind: dir_exists
+        path: src/snowbot/impact
+      - id: impact_tests
+        description: Impact tests present
+        kind: dir_exists
+        path: tests/impact
+      - id: changelog
+        description: CHANGELOG Unreleased section present
+        kind: file_contains
+        path: CHANGELOG.md
+        needle: "## [Unreleased]"
+      - id: status_md
+        description: STATUS.md tracks phase scope
+        kind: file_exists
+        path: STATUS.md
+      - id: anti_gaming
+        description: Diff must not weaken tests, thresholds, or mix governance edits
+        kind: anti_gaming_diff
+  "2":
+    title: Phase 2 doctor
+    checks:
+      - id: doctor_module
+        description: Doctor module present
+        kind: file_exists
+        path: src/snowbot/doctor.py
+      - id: doctor_tests
+        description: Doctor tests present
+        kind: file_exists
+        path: tests/test_doctor.py
+      - id: changelog
+        description: CHANGELOG Unreleased section present
+        kind: file_contains
+        path: CHANGELOG.md
+        needle: "## [Unreleased]"
+      - id: status_md
+        description: STATUS.md tracks phase scope
+        kind: file_exists
+        path: STATUS.md
+      - id: anti_gaming
+        description: Diff must not weaken tests, thresholds, or mix governance edits
+        kind: anti_gaming_diff
+  "4":
+    title: Phase 4 login, init, shell, prompts
+    checks:
+      - id: auth_module
+        description: Auth package present
+        kind: dir_exists
+        path: src/snowbot/auth
+      - id: auth_tests
+        description: Auth tests present
+        kind: dir_exists
+        path: tests/auth
+      - id: changelog
+        description: CHANGELOG Unreleased section present
+        kind: file_contains
+        path: CHANGELOG.md
+        needle: "## [Unreleased]"
+      - id: status_md
+        description: STATUS.md tracks phase scope
+        kind: file_exists
+        path: STATUS.md
+      - id: anti_gaming
+        description: Diff must not weaken tests, thresholds, or mix governance edits
+        kind: anti_gaming_diff
+  "3":
+    title: Phase 3 CLI agent backends
+    checks:
+      - id: backends_module
+        description: Backends package present
+        kind: dir_exists
+        path: src/snowbot/backends
+      - id: backends_tests
+        description: Backends tests present
+        kind: dir_exists
+        path: tests/backends
+      - id: changelog
+        description: CHANGELOG Unreleased section present
+        kind: file_contains
+        path: CHANGELOG.md
+        needle: "## [Unreleased]"
+      - id: status_md
+        description: STATUS.md tracks phase scope
+        kind: file_exists
+        path: STATUS.md
+      - id: anti_gaming
+        description: Diff must not weaken tests, thresholds, or mix governance edits
+        kind: anti_gaming_diff
+  "5":
+    title: Phase 5 pipeline orchestrator
+    checks:
+      - id: pipeline_module
+        description: Pipeline package present
+        kind: dir_exists
+        path: src/snowbot/pipeline
+      - id: pipeline_tests
+        description: Pipeline tests present
+        kind: dir_exists
+        path: tests/pipeline
+      - id: changelog
+        description: CHANGELOG Unreleased section present
+        kind: file_contains
+        path: CHANGELOG.md
+        needle: "## [Unreleased]"
+      - id: status_md
+        description: STATUS.md tracks phase scope
+        kind: file_exists
+        path: STATUS.md
+      - id: anti_gaming
+        description: Diff must not weaken tests, thresholds, or mix governance edits
+        kind: anti_gaming_diff
+  "5b":
+    title: Phase 5b intake adapters
+    checks:
+      - id: intake_module
+        description: Intake package present
+        kind: dir_exists
+        path: src/snowbot/intake
+      - id: intake_tests
+        description: Intake tests present
+        kind: dir_exists
+        path: tests/intake
+      - id: changelog
+        description: CHANGELOG Unreleased section present
+        kind: file_contains
+        path: CHANGELOG.md
+        needle: "## [Unreleased]"
+      - id: status_md
+        description: STATUS.md tracks phase scope
+        kind: file_exists
+        path: STATUS.md
+      - id: anti_gaming
+        description: Diff must not weaken tests, thresholds, or mix governance edits
+        kind: anti_gaming_diff
+  "7":
+    title: Phase 7 UAT deploy on AWS
+    checks:
+      - id: sample_app
+        description: Sample app present
+        kind: dir_exists
+        path: examples/sample-app
+      - id: changelog
+        description: CHANGELOG Unreleased section present
+        kind: file_contains
+        path: CHANGELOG.md
+        needle: "## [Unreleased]"
+      - id: status_md
+        description: STATUS.md tracks phase scope
+        kind: file_exists
+        path: STATUS.md
+      - id: anti_gaming
+        description: Diff must not weaken tests, thresholds, or mix governance edits
+        kind: anti_gaming_diff
+  "8":
+    title: Phase 8 local UI
+    checks:
+      - id: ui_module
+        description: UI package present
+        kind: dir_exists
+        path: src/snowbot/ui
+      - id: ui_tests
+        description: UI tests present
+        kind: dir_exists
+        path: tests/ui
+      - id: changelog
+        description: CHANGELOG Unreleased section present
+        kind: file_contains
+        path: CHANGELOG.md
+        needle: "## [Unreleased]"
+      - id: status_md
+        description: STATUS.md tracks phase scope
+        kind: file_exists
+        path: STATUS.md
+      - id: anti_gaming
+        description: Diff must not weaken tests, thresholds, or mix governance edits
+        kind: anti_gaming_diff
+  "2c":
+    title: Phase 2c facts (ask, drift, benchmark)
+    checks:
+      - id: facts_module
+        description: Facts package present
+        kind: dir_exists
+        path: src/snowbot/facts
+      - id: facts_tests
+        description: Facts tests present
+        kind: dir_exists
+        path: tests/facts
+      - id: changelog
+        description: CHANGELOG Unreleased section present
+        kind: file_contains
+        path: CHANGELOG.md
+        needle: "## [Unreleased]"
+      - id: status_md
+        description: STATUS.md tracks phase scope
+        kind: file_exists
+        path: STATUS.md
+      - id: anti_gaming
+        description: Diff must not weaken tests, thresholds, or mix governance edits
+        kind: anti_gaming_diff
+  "6":
+    title: Phase 6 update and release
+    checks:
+      - id: agents_md
+        description: AGENTS.md exists at repo root
+        kind: file_exists
+        path: AGENTS.md
+      - id: changelog
+        description: CHANGELOG Unreleased section present
+        kind: file_contains
+        path: CHANGELOG.md
+        needle: "## [Unreleased]"
+      - id: status_md
+        description: STATUS.md tracks phase scope
+        kind: file_exists
+        path: STATUS.md
+      - id: anti_gaming
+        description: Diff must not weaken tests, thresholds, or mix governance edits
+        kind: anti_gaming_diff
+  "9":
+    title: Phase 9 hosted mode
+    checks:
+      - id: serve_module
+        description: Serve package present
+        kind: dir_exists
+        path: src/snowbot/serve
+      - id: serve_tests
+        description: Serve tests present
+        kind: dir_exists
+        path: tests/serve
+      - id: changelog
+        description: CHANGELOG Unreleased section present
+        kind: file_contains
+        path: CHANGELOG.md
+        needle: "## [Unreleased]"
+      - id: status_md
+        description: STATUS.md tracks phase scope
+        kind: file_exists
+        path: STATUS.md
+      - id: anti_gaming
+        description: Diff must not weaken tests, thresholds, or mix governance edits
+        kind: anti_gaming_diff
