@@ -36,6 +36,20 @@ python -m research extract --run-dir /tmp/pilot-dry
 
 `run` exits 2 when the manifest's nominal cost is above `--budget-usd`, including on `--dry-run`. It exits 2 when neither `--dry-run` nor `--i-understand-the-budget` is set. It exits 3 for `claude-code`, `codex`, and `inspect` cells even after the acknowledgement: those CLIs are not started in this build. `provider_calls` stays 0.
 
+## Versions
+
+`research/versions/current/VERSION` is the live pin file (semantic `MAJOR.MINOR.PATCH`). It records the task-suite hash, oracle config hash, conditions hash, frozen SNOWBot scanner commit `2165b01dd96174ff8c963afef82b86458ceb71c9`, Inspect and agent-CLI versions observed from public release APIs on 2026-10-28, model id `haiku`, and the ImpossibleBench commit `d4f9a149db2b9cec0fed7bab01d91c07ee10aca2` (upstream `safety-research/impossiblebench` main, observed from the public commits API; this repo does not vendor a fork). Docker image digests are `unpinned` because `pilot.yaml` has no digest; that field is not an invented hash, and drift treats it as outdated.
+
+Every results row includes `version`. Results from different versions are never pooled. After this freeze, a change to the oracle, tasks, scanner commit, or conditions requires a new version. `verify_freeze` rejects a live file or scanner pin that no longer matches `VERSION`.
+
+`python -m research drift-check` compares pins to those public sources. If a source cannot be read, the finding is `unchecked` and the version is not guessed. It also treats as outdated: an infrastructure failure passed in or recorded on the ledger, a pinned model id present in a deprecation notice, an oracle self-check that misses a real `git diff` threshold drop, `snowbot validate` failing when the caller passes that flag, and an unpinned digest. The command prints a draft issue body. It does not push, merge, or edit governance paths. `--dry-run` is the default; `--no-dry-run` still does not open a pull request. The same drift signature allows two automated fix attempts (`fix_attempts` on the status object) and then returns `stop_and_report`.
+
+`python -m research archive` moves `research/versions/<old>/` to `research/archive/<old>/` and `docs/research/results/` to `docs/research/archive/<old>/` after the new version is on the named git branch. It writes `SUPERSEDED.md` and prints `research-v<version>`. It does not create or push the tag, does not overwrite an existing archive, and a second call is a no-op once the move has happened. `docs/research/` is local run data: keep it in `.git/info/exclude` so it is not committed.
+
+`research/ledger.json` stores spend per run. Defaults are 50 USD per month and 1.50 USD per run. A breach returns `schedule: paused` and `kill: true` and does not rewrite the committed status file by itself. `research/STATUS.json` ships with `schedule: paused`, `version_state: current`, and `kill: false`. Nothing here sets `schedule` to `active`. A human has to activate the schedule and confirm a run before any spend.
+
+`python -m research stability --input recorded.json` decides whether all of these hold, using only the file you pass: at least three consecutive scheduled runs on one version with no infrastructure failures; no oracle, task, scanner, pin, or condition change between them; an A/A difference inside the tolerance in that file; drift with no outdated pins and no unchecked pins; and CI / architect-gate green as an input flag. Oracle kappa and error targets are not built in. Until the pre-registration sets them, that check is `not_evaluated` and the version is not stable. When every check passes, the command prints a draft body that would set `schedule: paused` and `version_state: stable`. It does not open that pull request and it does not edit `STATUS.json`. The committed status stays `version_state: current`.
+
 A manifest whose agent is `local-noop` can write records after `--i-understand-the-budget` when the budget check passes. That agent does not call a model.
 
 ## Layout
@@ -49,7 +63,12 @@ A manifest whose agent is `local-noop` can write records after `--i-understand-t
 | `research/manifest.py` | Hashed cell list (tasks, conditions, models, seeds, digests, CLI versions) |
 | `research/extract.py` | `results.jsonl`, `summary.csv`, `tables.md`, `label_sample.csv` |
 | `research/configs/pilot.yaml` | 12 × A0–A4 × `haiku` × 3 seeds, 50 USD total, 1.50 USD per run |
-| `research/extensions.py` | Named, unimplemented version registry, drift check, archiver, stability evaluator |
+| `research/versions/current/VERSION` | Frozen MAJOR.MINOR.PATCH pins. Results from different versions are never pooled |
+| `research/drift.py` | `python -m research drift-check` (dry-run by default; does not open a PR) |
+| `research/archive.py` | Move a superseded version to `research/archive/<version>/` and print `research-v<version>` |
+| `research/stability.py` | `python -m research stability` evaluates recorded inputs only |
+| `research/STATUS.json` | Schedule defaults to `paused`. `version_state` is `current`. `kill` is false |
+| `research/ledger.json` | Monthly cap 50 USD, per-run cap 1.50 USD. A breach pauses the schedule and sets `kill` |
 
 Gate-strength counts coverage thresholds, skips and suppressions, and workflow or hook or CODEOWNERS changes. Taxonomy: threshold drop, skip/xfail, deleted or hollowed test, loosened assertion, `# type: ignore`, `# noqa`, rule disablement, `continue-on-error`, hook bypass, protection or CODEOWNERS change.
 

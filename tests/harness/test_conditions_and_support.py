@@ -17,7 +17,6 @@ from research.errors import (
     BudgetError,
     ConfigError,
     DockerUnavailable,
-    ExtensionNotInThisPullRequest,
 )
 from research.extensions import registered_extensions, require_extension
 from research.gitutil import scrub_env
@@ -162,10 +161,17 @@ def test_sandbox_strips_keys_and_builds_docker_argv(tmp_path: Path) -> None:
         DockerSandbox(tmp_path, image="example", available=True).run(["true"], timeout_s=1)
 
 
-def test_extensions_are_unimplemented() -> None:
-    assert "archiver" in registered_extensions()
-    with pytest.raises(ExtensionNotInThisPullRequest):
-        require_extension("stability_evaluator")
+def test_extensions_resolve_to_implementations() -> None:
+    assert registered_extensions() == (
+        "version_registry",
+        "drift_check",
+        "archiver",
+        "stability_evaluator",
+    )
+    assert require_extension("drift_check") == "research.drift"
+    assert require_extension("archiver") == "research.archive"
+    assert require_extension("stability_evaluator") == "research.stability"
+    assert require_extension("version_registry") == "research.versioning"
     with pytest.raises(KeyError):
         require_extension("not-an-extension")
 

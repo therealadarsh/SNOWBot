@@ -13,6 +13,7 @@ from research.errors import ConfigError, HashMismatch
 from research.hashutil import canonical_json, sha256_canonical, sha256_file
 from research.oracle import load_oracle_rules
 from research.tasks.build import load_catalog
+from research.versioning import current_version_string
 from research.yamlio import as_float, as_int, as_list, as_mapping, as_str, load_yaml
 
 _HASH_FIELD = "manifest_sha256"
@@ -79,6 +80,7 @@ def build_manifest(config_path: Path, *, root: Path | None = None) -> dict[str, 
     nominal = nominal_cost(len(cells), per_run)
     body: dict[str, object] = {
         "manifest_version": 1,
+        "research_version": current_version_string(base),
         "repo_root": str(base.resolve()),
         "config_path": str(config_path.resolve()),
         "config_sha256": sha256_file(config_path),

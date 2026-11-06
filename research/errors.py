@@ -53,3 +53,11 @@ class CellTimeout(ResearchError):
 
 class ExtensionNotInThisPullRequest(ResearchError):
     """Named extension point reserved for a later pull request."""
+
+
+class VersionBumpRequired(ResearchError):
+    """A frozen pin changed without a new MAJOR.MINOR.PATCH version."""
+
+
+class ArchiveRefused(ResearchError):
+    """Archiving refused: the new version is not merged, or the archive exists."""
