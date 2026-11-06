@@ -18,3 +18,11 @@ venv/
 *.log
 .idea/
 .vscode/
+
+# AWS CDK
+infra/node_modules/
+infra/cdk.out/
+
+# Generated on every validate run; commit them only on a governance branch.
+.snowbot/memory/validation/phase-*-2*.md
+.snowbot/memory/stops/

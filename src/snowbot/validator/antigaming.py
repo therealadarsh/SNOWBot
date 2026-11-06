@@ -7,18 +7,40 @@ import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
+# Mirrors the governance list in AGENTS.md. Entries ending in "/" match a whole tree.
 GOVERNANCE_PATH_PREFIXES: tuple[str, ...] = (
     "AGENTS.md",
+    "CLAUDE.md",
     "CONTRIBUTING.md",
-    ".github/workflows/",
+    ".github/",
+    ".pre-commit-config.yaml",
+    "pyproject.toml",
+    "setup.cfg",
+    "pytest.ini",
+    "tox.ini",
+    ".coveragerc",
+    "tests/conftest.py",
+    "scripts/",
     "src/snowbot/validator/",
     "src/snowbot/templates/",
+    ".snowbot/memory/",
+    ".claude/",
+    ".cursor/",
+    ".codex/",
+    ".mcp.json",
     "docs/ARCHITECT_GATE.md",
     "docs/GITHUB_SETUP.md",
     "docs/INDEPENDENT_VALIDATION.md",
     "docs/BRANCH_PROTECTION.md",
-    "scripts/independent_validate.sh",
-    ".pre-commit-config.yaml",
+)
+
+# Lockfiles and requirements files are governance wherever they live (e.g. infra/).
+GOVERNANCE_BASENAME_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"requirements[^/]*\.txt"),
+    re.compile(r"constraints[^/]*\.txt"),
+    re.compile(r".*\.lock"),
+    re.compile(r"package-lock\.json"),
+    re.compile(r"pnpm-lock\.yaml"),
 )
 
 GOVERNANCE_PYPROJECT_KEYS: tuple[str, ...] = (
@@ -109,6 +131,8 @@ def analyze_diff(diff_text: str) -> AntiGamingResult:
     _check_fail_under_lowered(diff_text, result)
     _check_pytest_skips(diff_text, result)
     _check_deleted_tests(diff_text, result)
+    _check_assertion_weakened(diff_text, result)
+    _check_coverage_pragma(diff_text, result)
     _check_broad_mypy_ignore(diff_text, result)
     _check_hardcoded_test_detection(diff_text, result)
     _check_governance_mixed_with_product(diff_text, result)
@@ -154,7 +178,11 @@ def _check_fail_under_lowered(diff: str, result: AntiGamingResult) -> None:
 
 
 def _check_pytest_skips(diff: str, result: AntiGamingResult) -> None:
-    marker = re.compile(r"@pytest\.mark\.(skip|xfail)\b|pytest\.mark\.(skip|xfail)\(")
+    marker = re.compile(
+        r"@pytest\.mark\.(skip|xfail)\b|pytest\.mark\.(skip|xfail)\("
+        r"|@unittest\.skip\b|\bunittest\.skip\("
+        r"|\bpytest\.(skip|importorskip)\("
+    )
     for line in diff.splitlines():
         if not line.startswith("+"):
             continue
@@ -167,8 +195,55 @@ def _check_pytest_skips(diff: str, result: AntiGamingResult) -> None:
 
 
 def _check_deleted_tests(diff: str, result: AntiGamingResult) -> None:
-    if re.search(r"^diff --git a/tests/.*\.py b/dev/null", diff, re.M):
-        result.findings.append(AntiGamingFinding("test_file_deleted", "A test module was removed"))
+    # Real git marks a deletion with ``+++ /dev/null`` under ``diff --git a/X b/X``.
+    for block in re.split(r"(?=^diff --git )", diff, flags=re.M):
+        header = re.match(r"diff --git a/(\S+) b/\S+", block)
+        if not header:
+            continue
+        path = header.group(1)
+        deleted = re.search(r"^deleted file mode ", block, re.M) or re.search(
+            r"^\+\+\+ /dev/null$", block, re.M
+        )
+        if deleted and path.startswith("tests/") and path.endswith(".py"):
+            result.findings.append(
+                AntiGamingFinding("test_file_deleted", f"A test module was removed: {path}")
+            )
+
+
+def _added_lines(diff: str) -> list[tuple[str, str]]:
+    """Return ``(path, text)`` for every added line in a unified diff."""
+    path = ""
+    lines: list[tuple[str, str]] = []
+    for line in diff.splitlines():
+        if line.startswith("+++ b/"):
+            path = line[6:].strip()
+        elif line.startswith("+") and not line.startswith("+++"):
+            lines.append((path, line[1:]))
+    return lines
+
+
+def _check_assertion_weakened(diff: str, result: AntiGamingResult) -> None:
+    tautology = re.compile(r"^\s*assert\s+(True|1)\s*(#.*)?$")
+    for path, text in _added_lines(diff):
+        if path.startswith("tests/") and tautology.match(text):
+            result.findings.append(
+                AntiGamingFinding(
+                    "assertion_weakened",
+                    f"Added tautological assertion in {path}: {text.strip()}",
+                )
+            )
+
+
+def _check_coverage_pragma(diff: str, result: AntiGamingResult) -> None:
+    pragma = re.compile(r"#\s*pragma:\s*no\s*cover", re.I)
+    for path, text in _added_lines(diff):
+        if path.endswith(".py") and pragma.search(text):
+            result.findings.append(
+                AntiGamingFinding(
+                    "coverage_pragma_added",
+                    f"Added coverage exclusion pragma in {path}",
+                )
+            )
 
 
 def _check_broad_mypy_ignore(diff: str, result: AntiGamingResult) -> None:
@@ -209,7 +284,7 @@ def _check_hardcoded_test_detection(diff: str, result: AntiGamingResult) -> None
 
 def _check_governance_mixed_with_product(diff: str, result: AntiGamingResult) -> None:
     touched = _touched_paths(diff)
-    gov = {p for p in touched if _is_governance_path(p)}
+    gov = {p for p in touched if is_governance_path(p)}
     product = {p for p in touched if _is_product_path(p)}
     if gov and product:
         result.findings.append(
@@ -231,13 +306,18 @@ def _touched_paths(diff: str) -> set[str]:
     return paths
 
 
-def _is_governance_path(path: str) -> bool:
-    if path == "pyproject.toml":
-        return True
-    return any(path.startswith(prefix) or path == prefix for prefix in GOVERNANCE_PATH_PREFIXES)
+def is_governance_path(path: str) -> bool:
+    """True when *path* (repo-relative, POSIX) may change only on a governance branch."""
+    for prefix in GOVERNANCE_PATH_PREFIXES:
+        if path == prefix or (prefix.endswith("/") and path.startswith(prefix)):
+            return True
+    basename = path.rsplit("/", 1)[-1]
+    return any(pattern.fullmatch(basename) for pattern in GOVERNANCE_BASENAME_PATTERNS)
 
 
 def _is_product_path(path: str) -> bool:
+    if is_governance_path(path):
+        return False
     if path.startswith("tests/") and path.endswith(".py"):
         return True
-    return bool(path.startswith("src/snowbot/") and not path.startswith("src/snowbot/validator/"))
+    return path.startswith("src/snowbot/")

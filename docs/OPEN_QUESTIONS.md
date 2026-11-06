@@ -1,23 +1,18 @@
 # Open questions
 
-Track unverified or pending API / product decisions. Remove items once confirmed in code and tests.
+Remove an item once the code and tests confirm it. Settled decisions stay in ADRs and in `STATUS.md`.
 
-## Cursor backend (Phase 3)
+## Settled for the build (do not re-open in product code)
 
-- Exact REST base URL and auth header format for Cursor Cloud Agents API (assumed bearer token via `CURSOR_API_KEY`).
-- Rate limits, pagination, and idempotency keys for agent run creation.
-- Whether project linking requires organization slug vs repository URL only.
+- Phase `3` backends are headless CLIs: Cursor CLI, Claude Code, and Codex. The Cursor Cloud Agents REST client is not a backend. `backend.kind: cursor` remains an alias for the Cursor CLI.
+- API keys and setup tokens live in the OS keychain under service `snowbot`, account = provider. Environment variables override the keychain. Keys are never written into the repo.
+- The approver is a different vendor from the builder. It is one schema-checked call with no tools.
+- VS Code Copilot Chat, personal or enterprise, is not a backend. An IDE subscription does not give `snowbot run` a programmable agent.
 
-## Keyring (Phase 3+)
+## Still open
 
-- Preferred keyring service name for storing `CURSOR_API_KEY` on macOS vs Linux vs Windows.
-
-## Init templates (Phase 4)
-
-- Canonical set of files copied into consumer repos (`.cursor/rules`, skills, `AGENTS.md` fragments).
-- Whether `init` should default to git branch `chore/snowbot-setup` or only document it.
-
-## Pipeline orchestration (Phase 5)
-
-- Step execution model: subprocess vs in-process hooks vs remote agent dispatch.
-- How backlog status syncs with `STATUS.md` in consumer repos.
+- Which Gemini or GitHub Models slug the approver should default to when the owner does not pass one. The factory uses whatever `VALIDATOR_MODEL` is set to.
+- Whether an enterprise that forbids third-party model APIs should be served only by Bedrock (phase `9`) or also by Azure OpenAI and GitHub Models in phase `3`.
+- Copilot CLI as an extra builder backend. Not in the phase `3` list. Add it only if `copilot` (or the documented headless equivalent) can run non-interactively inside Docker with an exportable token.
+- ServiceNow: OAuth app shape, assignment-group filter, and which state change counts as acceptance. Needed at phase `5b`.
+- Consumer-repo `init` file set beyond `snowbot.yaml`, `AGENTS.md`, `.snowbot/memory/`, and the `uat` branch. Phase `4` decides the rest.

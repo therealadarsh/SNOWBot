@@ -33,12 +33,24 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+ui = [
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+]
+aws = [
+    "boto3>=1.35",
+]
 dev = [
+    "snowbot[ui,aws]",
+    "boto3-stubs[bedrock-runtime,s3,secretsmanager]>=1.35",
+    "hypothesis>=6.100",
+    "jsonschema>=4.22",
     "mypy>=1.10",
     "pre-commit>=3.7",
     "pytest>=8.2",
     "pytest-cov>=5.0",
     "pytest-mock>=3.14",
+    "pytest-playwright>=0.5",
     "respx>=0.21",
     "ruff>=0.5",
     "types-PyYAML>=6.0",
@@ -54,10 +66,6 @@ Issues = "https://github.com/therealadarsh/SNOWBot/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/snowbot"]
-
-[tool.hatch.build.targets.wheel.force-include]
-"src/snowbot/validator/checklist.yaml" = "snowbot/validator/checklist.yaml"
-"src/snowbot/templates" = "snowbot/templates"
 
 [tool.ruff]
 target-version = "py311"
@@ -76,14 +84,24 @@ packages = ["snowbot"]
 mypy_path = "src"
 
 [[tool.mypy.overrides]]
-module = ["keyring.*"]
+module = ["jsonschema.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = ["--strict-markers", "--strict-config"]
+# Tests that need a browser, Docker, AWS or a live service run in their own CI jobs
+# (`pytest -m ui`, `pytest -m docker`); the default run deselects them.
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "-m",
+    "not (ui or docker or aws or integration)",
+]
 markers = [
-    "integration: marks tests that hit external services (deselect with '-m \"not integration\"')",
+    "integration: hits a live external service; run explicitly with -m integration",
+    "ui: needs Playwright browsers; run with -m ui",
+    "docker: needs a Docker daemon; run with -m docker",
+    "aws: needs AWS credentials; run with -m aws",
 ]
 
 [tool.coverage.run]

@@ -1,0 +1,8 @@
+diff --git a/src/snowbot/mod.py b/src/snowbot/mod.py
+index fde8622..42fd3b2 100644
+--- a/src/snowbot/mod.py
++++ b/src/snowbot/mod.py
+@@ -1,2 +1,2 @@
+ def run():
+-    return fallback()
++    return fallback()  # pragma: no cover
