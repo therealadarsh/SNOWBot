@@ -1,0 +1,8 @@
+{
+  "name": "snowbot-infra",
+  "private": true,
+  "description": "Pins the AWS CDK CLI used by CI and the UAT deploy workflow.",
+  "devDependencies": {
+    "aws-cdk": "2.1148.0"
+  }
+}

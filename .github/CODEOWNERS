@@ -1,10 +1,26 @@
 # Default reviewers for SNOWBot changes
 * @therealadarsh
 
-# Governance — requires human approval (label PR `governance`)
-AGENTS.md @therealadarsh
-CONTRIBUTING.md @therealadarsh
-.github/workflows/ @therealadarsh
-.pre-commit-config.yaml @therealadarsh
-pyproject.toml @therealadarsh
-src/snowbot/validator/ @therealadarsh
+# Governance (mirrors AGENTS.md); PRs label `governance`
+/AGENTS.md @therealadarsh
+/CLAUDE.md @therealadarsh
+/CONTRIBUTING.md @therealadarsh
+/.github/ @therealadarsh
+/.pre-commit-config.yaml @therealadarsh
+/pyproject.toml @therealadarsh
+/tests/conftest.py @therealadarsh
+/scripts/ @therealadarsh
+/src/snowbot/validator/ @therealadarsh
+/src/snowbot/templates/ @therealadarsh
+/.snowbot/memory/ @therealadarsh
+/.claude/ @therealadarsh
+/.cursor/ @therealadarsh
+/.codex/ @therealadarsh
+/.mcp.json @therealadarsh
+/docs/ARCHITECT_GATE.md @therealadarsh
+/docs/GITHUB_SETUP.md @therealadarsh
+/docs/INDEPENDENT_VALIDATION.md @therealadarsh
+/docs/BRANCH_PROTECTION.md @therealadarsh
+requirements*.txt @therealadarsh
+*.lock @therealadarsh
+package-lock.json @therealadarsh
