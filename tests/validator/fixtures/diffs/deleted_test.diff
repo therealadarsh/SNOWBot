@@ -1,7 +1,8 @@
-diff --git a/tests/test_removed.py b/dev/null
+diff --git a/tests/test_calc.py b/tests/test_calc.py
 deleted file mode 100644
---- a/tests/test_removed.py
+index 5e3ac25..0000000
+--- a/tests/test_calc.py
 +++ /dev/null
-@@ -1,3 +0,0 @@
--def test_removed():
--    assert True
+@@ -1,2 +0,0 @@
+-def test_add():
+-    assert add(2, 2) == 4
