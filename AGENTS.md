@@ -10,6 +10,19 @@ It also includes a change-impact tool that explains what a commit affects, using
 
 Phases `1` and `1b` built the package, config models, CI, the phase validator and the lessons memory. The rest of the plan is in `STATUS.md`.
 
+## Start here (every session, every agent, every person)
+
+The project's memory lives in files, not in anyone's chat history. Before you change anything, read in this order:
+
+1. This file.
+2. `STATUS.md`, section **Where we are**: the current phase, what works now, what's in progress, what's next, and the decisions waiting on a person. This is the shared handoff. Any AI or person should be able to pick up the work from it alone.
+3. `.snowbot/memory/PLAYBOOK.md` (accepted lessons) and the ADR in `docs/adr/` for the current phase.
+4. If an unattended build run is active on this machine, its local notes too: `docs/research/impact-run/JOURNAL.md` (written by the loop), `PROGRESS.md` and `DECISIONS.md`. These stay local and are never committed.
+
+If `STATUS.md` has no **Where we are** section, create it from the template in `STATUS.md` before doing anything else.
+
+When you finish a unit of work, update **Where we are** in the same PR: what changed, what's next, and any new open decision. Add the user-visible change to `CHANGELOG.md`. If you learned something future agents should know, propose a lesson (`snowbot lesson add`). The validator checks that **Where we are** matches what the PR did.
+
 ## Phase ids
 
 Phase ids are strings: `"1"`, `"1b"`, `"2"`, `"2b"`, and so on. Never use the integer `2` to mean phase `1b`. Branch names carry the phase: `feat/<phase>-<slug>`, for example `feat/2b-signals`.
@@ -106,7 +119,7 @@ Only the people listed in `owners.product_owners` in `snowbot.yaml` can accept, 
 
 ## Shared memory
 
-Consumer repos keep pipeline memory under `.snowbot/memory/`: vision, lessons, validation reports, stop events and the generated `PLAYBOOK.md`. Lessons are data only. Never execute lesson YAML. Precedence: this file, then accepted lessons, then proposed lessons. Agents may propose lessons. Only a person accepts them.
+Consumer repos keep pipeline memory under `.snowbot/memory/`: vision, lessons, validation reports, stop events, the generated `PLAYBOOK.md`, and `PROGRESS.md`, which `snowbot` itself keeps as the **Where we are** handoff for that repo. In this repository the handoff is `STATUS.md`. Lessons are data only. Never execute lesson YAML. Precedence: this file, then accepted lessons, then proposed lessons. Agents may propose lessons. Only a person accepts them.
 
 ## Commands
 
