@@ -1,72 +1,59 @@
 # GitHub repository setup (owner)
 
-Short checklist for settings that **only a repository admin** can change. Agents and CI tokens cannot complete these steps.
+Settings that only a repository admin can change. Agents and CI tokens can't do these steps. The full owner checklist (the unattended build, labels, credentials, optional AWS) is [OWNER_SETUP.md](OWNER_SETUP.md).
 
 Repository: [therealadarsh/SNOWBot](https://github.com/therealadarsh/SNOWBot)
 
-SNOWBot uses a **simple merge gate**: the **Senior Software Architect** role is enforced by CI (`architect-gate`), not by GitHub PR approval bots or PAT-driven review automation.
+The independent technical check is CI (`architect-gate`), not GitHub approval bots or PAT-driven review automation.
 
-## Simple mode (recommended)
+## Rulesets on `main` and `uat`
 
-Configure the ruleset on **`main`** as follows:
+Settings → Rules → Rulesets. Create one ruleset per branch.
 
-| Setting | Value |
-| ------- | ----- |
-| Required pull request approvals | **0** |
-| Require review from Code Owners | **Off** (optional; see strict mode below) |
-| Require status checks | **On** (strict / up to date) |
-| Required checks (exact names) | See table below |
-| Auto-merge | Optional (squash); still requires all checks green |
+| Setting | `main` | `uat` |
+| ------- | ------ | ----- |
+| Require a pull request | Yes | Yes |
+| Required approvals | 0, or 1+ with Code Owners review (strict mode below) | 0 |
+| Required checks | `CI`, `architect-gate`, `test-inventory` | Same |
+| Require branches to be up to date | Optional | Yes |
+| Allowed merge method | Merge commits | Merge commits |
+| Block force pushes and deletions | Yes | Yes |
+| Bypass actors | None | None |
+| Restrict creations | No | No (the loop creates `uat`) |
 
-### Required status checks
+Add each check by exact name. A name shows up in the picker after it has run once on a PR.
 
-1. Open **Settings** → **Rules** → **Rulesets** (or **Branches** if using classic protection).
-2. Edit the ruleset that targets **`main`**.
-3. Under **Require status checks to pass**, add each check **by exact name** (after a PR run makes them appear in the picker):
+| Check | Workflow | What it does |
+| ----- | -------- | ------------ |
+| `CI` | CI | Passes only when every CI job passed: tests on 3.11 to 3.13, wheel build, `ui` and `docker` marker tests, `cdk synth` once `infra/` has an app |
+| `architect-gate` | architect-gate | Validator and checklist from the PR base, run against the PR head |
+| `test-inventory` | CI | Fails when a base test id is missing on the head |
 
-| Check name | Workflow | Purpose |
-| ---------- | -------- | ------- |
-| `architect-gate` | architect-gate | Independent validator: lint, types, tests, `snowbot validate`, memory status |
-| `test (3.11)` | CI | Python matrix |
-| `test (3.12)` | CI | Python matrix |
-| `test (3.13)` | CI | Python matrix |
-| `conventional-commit` | PR Title | Conventional Commits title |
-| `pip-audit` | Security | Dependency audit |
-| `dependency-review` | Security | PR dependency diff (requires Dependency graph) |
+`conventional-commit`, `pip-audit` and `dependency-review` also run on every PR. The loop treats any failing check as a CI failure, so they block `uat` merges without being required in the ruleset.
 
-Do **not** require PAT-based “architect bot” approvals. The architect persona is in `src/snowbot/templates/roles/architect.md.j2` and runs in CI.
+There is no bypass label for `architect-gate`.
 
-### Emergency bypass
+## Dependency graph (for `dependency-review`)
 
-Label a PR `skip-architect` to skip the architect gate (incidents only; explain in the PR).
+1. Settings → Security → Code security and analysis.
+2. Enable Dependency graph.
 
-### Dependency graph (for `dependency-review`)
+`dependency-review` is blocking and fails while the graph is off. [GitHub docs: dependency graph](https://docs.github.com/en/code-security/supply-chain-security/understanding-your-software-supply-chain/configuring-the-dependency-graph)
 
-1. **Settings** → **Security** → **Code security and analysis**
-2. Enable **Dependency graph**
-3. [GitHub docs: dependency graph](https://docs.github.com/en/code-security/supply-chain-security/understanding-your-software-supply-chain/configuring-the-dependency-graph)
+## Governance PRs
 
-Do **not** add `dependency-review` as a required ruleset check until the graph is enabled and a PR shows a green (non-skipped) dependency review. See [BRANCH_PROTECTION.md](BRANCH_PROTECTION.md).
-
-### Governance PRs
-
-- Label: **`governance`**
-- Default validation phase **`1b`** when no `phase:*` label or `Phase:` line in the PR body
-- Owners squash-merge after checks are green; no separate approval token required in simple mode
-
-See also [ARCHITECT_GATE.md](ARCHITECT_GATE.md) and [BRANCH_PROTECTION.md](BRANCH_PROTECTION.md).
+- Branch `governance/<slug>` from `main`, label `governance`.
+- `architect-gate` uses phase `1b` for non-feature branches unless the PR has exactly one `phase:<id>` label.
+- A person merges them.
 
 ## Strict mode (teams)
 
-If you prefer human CODEOWNERS review in addition to CI:
+- Required approving reviews: 1 or more.
+- Require review from Code Owners (see `.github/CODEOWNERS`).
+- `architect-gate` stays the independent technical check.
 
-- Set required approving reviews to **1+**
-- Enable **Require review from Code Owners** (see `.github/CODEOWNERS`)
-- Label governance PRs **`governance`** for filtering
-- CI **`architect-gate`** remains the independent technical validator
+The PR Title workflow skips conventional-commit validation for `dependabot[bot]` and `app/dependabot`.
 
-The **PR Title** workflow skips conventional-commit validation for `dependabot[bot]` / `app/dependabot` actors.
+## Labels
 
-## Merge and approve
-
-Only maintainers can approve CODEOWNERS-requested reviews and squash-merge to `main`. Agents may open and update PRs but should not merge governance changes without owner review.
+Create `governance` and `needs-human` if they are missing.

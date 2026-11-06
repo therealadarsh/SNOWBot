@@ -11,13 +11,15 @@ pip install -e ".[dev]"
 pre-commit install
 ```
 
-## Branch naming
+## Branches
 
-- Feature work: `feat/<short-description>`
-- Fixes: `fix/<short-description>`
-- Chores/docs/CI: `chore/`, `docs/`, or `ci/` prefixes
+| Branch | Base | Merged by |
+| ------ | ---- | --------- |
+| `feat/<phase>-<slug>` (e.g. `feat/2b-signals`) | `uat` | The orchestrator, after validation and CI |
+| `governance/<slug>` | `main` | A person (label `governance`) |
+| `release/<date>` | `uat` | A person, into `main` |
 
-Phase 1 landed on `feat/phase-1-scaffold`. Template setup branches in consumer repos use `chore/snowbot-setup`.
+`architect-gate` reads the phase from the `feat/<phase>-` prefix. Template setup branches in consumer repos use `chore/snowbot-setup`.
 
 ## Quality gates
 
@@ -29,14 +31,14 @@ mypy
 pytest --cov=snowbot --cov-fail-under=85
 ```
 
-Rebase onto `main` and update `CHANGELOG.md` (Unreleased) and `STATUS.md` when behavior or scope changes.
+Bring your branch up to date with its base (merge the base in once a PR is open; don't rebase it) and update `CHANGELOG.md` (Unreleased) and `STATUS.md` when behavior or scope changes.
 
 ## Independent validation
 
 Implementers run local gates first. Before marking a PR **ready for review**, an independent validator (separate agent or human with fresh context) must run:
 
 ```bash
-export SNOWBOT_VALIDATE_BASE=origin/main   # PR merge base
+export SNOWBOT_VALIDATE_BASE=origin/uat    # the PR's base branch
 export PR_URL=https://github.com/therealadarsh/SNOWBot/pull/N
 ./scripts/independent_validate.sh
 ```
@@ -51,7 +53,7 @@ See [AGENTS.md](AGENTS.md). Governance changes (validator, checklist, CI, covera
 
 Use the PR template checklist (validation verdict at top). PR titles must follow Conventional Commits (see `.github/workflows/pr-title.yml`).
 
-**Merge policy:** human approval required; no auto-merge.
+**Merge policy:** see `AGENTS.md`. A person merges into `main`; only the orchestrator merges into `uat`.
 
 ## Security
 

@@ -6,7 +6,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 PHASE_ID="${SNOWBOT_PHASE_ID:-1b}"
-BASE_REF="${SNOWBOT_VALIDATE_BASE:-origin/main}"
+BASE_REF="${SNOWBOT_VALIDATE_BASE:-origin/uat}"
 PR_URL="${PR_URL:-}"
 VENV="${VALIDATE_VENV:-$ROOT/.venv-validate}"
 
