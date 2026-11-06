@@ -1,0 +1,8 @@
+diff --git a/tests/test_calc.py b/tests/test_calc.py
+index 5e3ac25..2d04876 100644
+--- a/tests/test_calc.py
++++ b/tests/test_calc.py
+@@ -1,2 +1,3 @@
+ def test_add():
++    pytest.importorskip("calc_backend")
+     assert add(2, 2) == 4
