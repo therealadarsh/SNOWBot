@@ -4,6 +4,32 @@
 **CLI / package:** `snowbot`  
 **Config file:** `snowbot.yaml` (override with `SNOWBOT_CONFIG`)
 
+## Where we are
+
+The shared handoff (see "Start here" in `AGENTS.md`). Keep it short and true. Update it in every PR.
+
+_Updated: 2026-11-06, in the bootstrap PR (`governance/autonomous-pipeline`)._
+
+- **Current phase:** bootstrap. This PR sets the governance the unattended build run needs: the `uat` merge policy, checklist entries for every phase, hardened CI, and the owner setup guide.
+- **Works now (try it):** `snowbot validate --phase 1b`, `snowbot lesson …`, `snowbot playbook`, `snowbot onboard`, `snowbot status --check`, `snowbot doctor` (basic).
+- **In progress:** nothing else. Feature phases wait for this PR.
+- **Next:** phase `2b`, the change-impact tool (`snowbot impact`), built by the unattended run once this PR is merged and the `main` and `uat` rulesets are in place.
+- **Open decisions (need a person):** merge this PR; set the rulesets (`docs/OWNER_SETUP.md`), allowing merge commits on both `main` and `uat`; choose whether release PRs may auto-merge after product-owner acceptance (off by default).
+- **Known problems:** `architect-gate` fails on this PR only. It installs the validator from `main`, and `main`'s packaging can't build a wheel. This PR fixes the packaging, so the gate works from the next PR on.
+
+Template for a fresh **Where we are**:
+
+```markdown
+_Updated: <date>, in <PR or branch>._
+
+- **Current phase:**
+- **Works now (try it):**
+- **In progress:**
+- **Next:**
+- **Open decisions (need a person):**
+- **Known problems:**
+```
+
 ## Phase overview
 
 Phase ids are strings (`"1"`, `"1b"`, `"2"`, …). Phase **1b** is not phase **2** (doctor).
