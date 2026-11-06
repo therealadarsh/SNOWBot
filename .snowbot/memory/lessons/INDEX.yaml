@@ -3,48 +3,24 @@ lessons:
 - id: lsn-api
   status: proposed
   dedupe_key: verify-api-first
-  path: ''
+  path: .snowbot/memory/lessons/proposed/api-verify-first.yaml
 - id: lsn-changelog
   status: proposed
   dedupe_key: changelog-unreleased
-  path: ''
+  path: .snowbot/memory/lessons/proposed/changelog-unreleased.yaml
 - id: lsn-open-q
   status: proposed
   dedupe_key: open-questions-md
-  path: ''
+  path: .snowbot/memory/lessons/proposed/open-questions-stub.yaml
 - id: lsn-phase-ids
   status: proposed
   dedupe_key: string-phase-ids
-  path: ''
+  path: .snowbot/memory/lessons/proposed/phase-id-strings.yaml
 - id: lsn-pr-size
   status: proposed
   dedupe_key: pr-size-discipline
-  path: ''
+  path: .snowbot/memory/lessons/proposed/pr-size-discipline.yaml
 - id: lsn-status
   status: proposed
   dedupe_key: status-md-updates
-  path: ''
-- id: lsn-api
-  status: proposed
-  dedupe_key: verify-api-first
-  path: ''
-- id: lsn-changelog
-  status: proposed
-  dedupe_key: changelog-unreleased
-  path: ''
-- id: lsn-open-q
-  status: proposed
-  dedupe_key: open-questions-md
-  path: ''
-- id: lsn-phase-ids
-  status: proposed
-  dedupe_key: string-phase-ids
-  path: ''
-- id: lsn-pr-size
-  status: proposed
-  dedupe_key: pr-size-discipline
-  path: ''
-- id: lsn-status
-  status: proposed
-  dedupe_key: status-md-updates
-  path: ''
+  path: .snowbot/memory/lessons/proposed/status-phase-tracking.yaml

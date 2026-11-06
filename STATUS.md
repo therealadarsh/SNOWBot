@@ -24,6 +24,7 @@ Phase ids are strings (`"1"`, `"1b"`, `"2"`, …). Phase **1b** is not phase **2
 - String phase ids in CLI, checklist, reports, and `state.json`.
 - `snowbot validate --phase <id> [--base-ref …]`, lesson/playbook/onboard commands, `snowbot status --check`.
 - Anti-gaming diff checks; independent validation script (`scripts/independent_validate.sh`).
+- Lesson admission: `INDEX.yaml` has one entry per lesson; `lesson accept` requires evidence that resolves to a file, pull request, or stop event; playbook generation drops lessons that contradict AGENTS.md safety rules.
 - Governance paths in CODEOWNERS; PR template validation block.
 - **Architect merge gate:** CI job `architect-gate` (Senior Software Architect validator); see `docs/ARCHITECT_GATE.md` and `docs/GITHUB_SETUP.md` (simple mode: no PAT approval bots).
 

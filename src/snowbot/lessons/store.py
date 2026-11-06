@@ -8,6 +8,7 @@ from pathlib import Path
 import yaml
 
 from snowbot.errors import SnowbotError
+from snowbot.lessons.evidence import unresolved_evidence_refs
 from snowbot.lessons.models import Lesson, LessonIndex, LessonIndexEntry, LessonStatus
 from snowbot.memory.layout import MemoryLayout
 
@@ -25,14 +26,21 @@ class LessonStore:
 
     def list_lessons(self, *, status: LessonStatus | None = None) -> list[Lesson]:
         lessons: list[Lesson] = []
-        for st in (LessonStatus.PROPOSED, LessonStatus.ACCEPTED, LessonStatus.RETIRED):
-            if status is not None and st != status:
-                continue
-            directory = self._dir_for_status(st)
+        seen: set[Path] = set()
+        # Proposed and retired lessons share one directory. Scanning that
+        # directory once per status listed every file twice in INDEX.yaml.
+        for directory in self._directories_for_list(status):
             if not directory.is_dir():
                 continue
             for path in sorted(directory.glob("*.yaml")):
-                lessons.append(self._load_file(path))
+                resolved = path.resolve()
+                if resolved in seen:
+                    continue
+                seen.add(resolved)
+                lesson = self._load_file(path)
+                if status is not None and lesson.status != status:
+                    continue
+                lessons.append(lesson)
         return sorted(lessons, key=lambda item: item.created_at)
 
     def get(self, lesson_id: str) -> Lesson:
@@ -59,6 +67,10 @@ class LessonStore:
 
     def accept(self, lesson_id: str, *, dry_run: bool = False) -> Lesson:
         lesson = self.get(lesson_id)
+        missing = unresolved_evidence_refs(self._layout, lesson)
+        if missing:
+            msg = "Evidence does not resolve: " + ", ".join(missing)
+            raise LessonStoreError(msg, code="evidence_unresolved", details={"refs": missing})
         if lesson.status == LessonStatus.ACCEPTED:
             return lesson
         lesson.status = LessonStatus.ACCEPTED
@@ -87,7 +99,7 @@ class LessonStore:
         entries: list[LessonIndexEntry] = []
         for lesson in self.list_lessons():
             path = self._path_for(lesson.id)
-            rel = path.relative_to(self._layout.root).as_posix() if path else ""
+            rel = self._relative_display_path(path) if path else ""
             entries.append(
                 LessonIndexEntry(
                     id=lesson.id,
@@ -104,19 +116,49 @@ class LessonStore:
         )
         self._layout.touch_index_updated()
 
-    def _dir_for_status(self, status: LessonStatus) -> Path:
-        if status == LessonStatus.ACCEPTED:
-            return self._layout.lessons_accepted
-        return self._layout.lessons_proposed
+    def _directories_for_list(self, status: LessonStatus | None) -> list[Path]:
+        directories: list[Path] = []
+        if status is None or status is LessonStatus.ACCEPTED:
+            directories.append(self._layout.lessons_accepted)
+        if status is None or status in (LessonStatus.PROPOSED, LessonStatus.RETIRED):
+            directories.append(self._layout.lessons_proposed)
+        return directories
 
     def _path_for(self, lesson_id: str) -> Path | None:
         return self._find_path(lesson_id)
 
+    def _relative_display_path(self, path: Path) -> str:
+        resolved = path.resolve()
+        for base in (self._layout.root, self._layout.memory_dir):
+            try:
+                return resolved.relative_to(base.resolve()).as_posix()
+            except ValueError:
+                continue
+        return resolved.as_posix()
+
     def _find_path(self, lesson_id: str) -> Path | None:
-        for directory in (self._layout.lessons_proposed, self._layout.lessons_accepted):
+        directories = (self._layout.lessons_proposed, self._layout.lessons_accepted)
+        for directory in directories:
             candidate = directory / f"{lesson_id}.yaml"
             if candidate.is_file():
                 return candidate
+        for directory in directories:
+            if not directory.is_dir():
+                continue
+            for path in sorted(directory.glob("*.yaml")):
+                if self._peek_id(path) == lesson_id:
+                    return path
+        return None
+
+    def _peek_id(self, path: Path) -> str | None:
+        try:
+            raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        except (OSError, yaml.YAMLError):
+            return None
+        if isinstance(raw, dict):
+            lesson_id = raw.get("id")
+            if isinstance(lesson_id, str):
+                return lesson_id
         return None
 
     def _find_by_dedupe(self, dedupe_key: str) -> Lesson | None:

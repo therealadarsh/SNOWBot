@@ -16,5 +16,6 @@ def test_promote_refreshes_playbook(tmp_path: Path) -> None:
     store.add_proposed(
         Lesson(id="p", title="P", body="text", evidence=[LessonEvidence(ref="r")]),
     )
+    (tmp_path / "r").write_text("evidence\n", encoding="utf-8")
     promote_lesson(layout, "p")
     assert layout.playbook.is_file()
