@@ -58,6 +58,12 @@ Phase ids are strings (`"1"`, `"1b"`, `"2"`, …). Phase **1b** is not phase **2
 
 Branch rules, required checks, and Dependency graph are documented for the owner in [docs/BRANCH_PROTECTION.md](docs/BRANCH_PROTECTION.md) and [docs/GITHUB_SETUP.md](docs/GITHUB_SETUP.md). Agents cannot edit GitHub rulesets or merge governance PRs.
 
+## Research harness
+
+Not a phase id. Draft package `research/` holds task fixtures, condition arms, an independent path/pattern outcome oracle, a cell runner, a hashed manifest, and extract tables for a later gate-weakening study. No pilot or main-study model run is executed here. The outcome measure is not `anti_gaming_diff`. The pinned scanner commit is metadata in `research/configs/oracle_rules.yaml`.
+
+Version registry, drift check, archiver, and stability evaluation live under `research/` (`versions/current/VERSION`, `drift-check`, `archive`, `stability`, `STATUS.json`, `ledger.json`). The committed schedule is `paused` (`version_state: current`, `kill: false`, fix-attempt counter `0`). Drift checks do not open pull requests or spend money. Stability is evaluated from recorded inputs and does not mark the committed status `stable`. No pilot or paid model run is executed here. A workflow that would launch the harness is intentionally absent; Docker image digests stay `unpinned` (drift treats that as outdated) because no digest was available to pin.
+
 ## Open questions
 
 See [docs/OPEN_QUESTIONS.md](docs/OPEN_QUESTIONS.md) for unverified Cursor API details.
