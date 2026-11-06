@@ -2,11 +2,9 @@ name: architect-gate
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, labeled, unlabeled]
 
-permissions:
-  contents: read
-  pull-requests: write
+permissions: {}
 
 concurrency:
   group: architect-gate-${{ github.event.pull_request.number }}
@@ -16,154 +14,181 @@ jobs:
   architect-gate:
     name: architect-gate
     runs-on: ubuntu-latest
-    if: >-
-      !contains(github.event.pull_request.labels.*.name, 'skip-architect')
+    permissions:
+      contents: read
+    outputs:
+      verdict: ${{ steps.decide.outputs.verdict }}
+      report: ${{ steps.decide.outputs.report }}
     steps:
       - name: Checkout PR head
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.pull_request.head.sha }}
+          path: head
           fetch-depth: 0
+          persist-credentials: false
 
-      - name: Resolve validation phase
-        id: phase
-        env:
-          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ' ') }}
-          PR_BODY: ${{ github.event.pull_request.body }}
-          DEFAULT_GOVERNANCE_PHASE: "1b"
-        run: |
-          set -euo pipefail
-          phase="$(python3 - <<'PY'
-          import os
-          import re
+      # The validator and checklist come from the base, so a PR can't change the rules it is judged by.
+      - name: Checkout validator from the PR base
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: validator
+          persist-credentials: false
 
-          labels = [x for x in os.environ.get("PR_LABELS", "").split() if x]
-          phase = ""
-          for label in labels:
-              if label.startswith("phase:"):
-                  phase = label.split(":", 1)[1]
-                  break
-          if not phase and "governance" in labels:
-              phase = os.environ.get("DEFAULT_GOVERNANCE_PHASE", "1b")
-          if not phase:
-              body = os.environ.get("PR_BODY") or ""
-              match = re.search(r"(?im)^[ \t]*Phase:[ \t]*([0-9]+[a-z]?)", body)
-              if match:
-                  phase = match.group(1)
-          if not phase:
-              phase = "1b"
-          print(phase, end="")
-          PY
-          )"
-          echo "id=$phase" >> "$GITHUB_OUTPUT"
-          echo "Resolved phase: $phase"
-
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
-          cache: pip
 
-      - name: Install dependencies
+      - name: Install the base validator
         run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          python -m venv "$RUNNER_TEMP/validator-venv"
+          "$RUNNER_TEMP/validator-venv/bin/pip" install -q ./validator
 
-      - name: Fetch base branch for diff checks
-        run: git fetch origin main:refs/remotes/origin/main
-
-      - name: Independent validation (script or equivalent)
-        id: validate
+      - name: Resolve phase
+        id: phase
         env:
-          SNOWBOT_PHASE_ID: ${{ steps.phase.outputs.id }}
-          SNOWBOT_VALIDATE_BASE: origin/main
-          PR_URL: ${{ github.event.pull_request.html_url }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
         run: |
-          set -euo pipefail
-          verdict="pass"
-          summary=""
+          python3 - <<'PY'
+          import json, os, re, sys
 
-          run_equivalent() {
-            ruff check src tests
-            ruff format --check src tests
-            mypy
-            pytest --cov=snowbot --cov-report=term-missing --cov-fail-under=85
-            set +e
-            validate_out="$(snowbot validate --phase "$SNOWBOT_PHASE_ID" --base-ref "$SNOWBOT_VALIDATE_BASE" --pr "$PR_URL" 2>&1)"
-            validate_rc=$?
-            set -e
-            echo "$validate_out"
-            if [[ "$validate_rc" -ne 0 ]]; then
-              if echo "$validate_out" | grep -q "governance_mixed_with_product"; then
-                verdict="pass_with_notes"
-                summary="Phase validate noted governance_mixed_with_product (bootstrap/governance PR exception)."
-                validate_rc=0
-              else
-                echo "snowbot validate failed"
-                exit "$validate_rc"
-              fi
-            fi
-            snowbot status --check
-          }
+          head_ref = os.environ["HEAD_REF"]
+          labels = json.loads(os.environ["LABELS"])
+          match = re.match(r"feat/([0-9]+[a-z]?)-", head_ref)
+          label_phases = sorted(l.split(":", 1)[1] for l in labels if l.startswith("phase:"))
+          if match:
+              phase, source = match.group(1), "branch name"
+          elif len(label_phases) == 1:
+              phase, source = label_phases[0], "phase: label"
+          elif len(label_phases) > 1:
+              sys.exit(f"::error::More than one phase: label: {label_phases}")
+          elif not head_ref.startswith("feat/"):
+              phase, source = "1b", "default for non-feature branches"
+          else:
+              sys.exit("::error::Feature branch must be named feat/<phase>-<slug>")
+          if not re.fullmatch(r"[0-9]+(?:[a-z][a-z0-9]*)?", phase):
+              sys.exit(f"::error::Invalid phase id {phase!r}")
+          print(f"Phase {phase} (from {source})")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
+              out.write(f"id={phase}\n")
+          PY
 
-          if [[ -f scripts/independent_validate.sh ]]; then
-            chmod +x scripts/independent_validate.sh
-            set +e
-            script_out="$(./scripts/independent_validate.sh 2>&1)"
-            script_rc=$?
-            set -e
-            echo "$script_out"
-            if [[ "$script_rc" -ne 0 ]]; then
-              if echo "$script_out" | grep -q "governance_mixed_with_product"; then
-                verdict="pass_with_notes"
-                summary="Independent script noted governance_mixed_with_product."
-              else
-                exit "$script_rc"
-              fi
-            fi
-            if echo "$script_out" | grep -q "verdict=pass_with_notes"; then
-              verdict="pass_with_notes"
-              summary="Independent validation pass_with_notes (see workflow log)."
-            fi
-          else
-            run_equivalent
-          fi
+      - name: Run the base validator against the PR head
+        working-directory: head
+        env:
+          PHASE: ${{ steps.phase.outputs.id }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          "$RUNNER_TEMP/validator-venv/bin/python" - > "$RUNNER_TEMP/gate.json" <<'PY'
+          import json, os
+          from pathlib import Path
 
-          {
-            echo "verdict=$verdict"
-            echo "summary<<EOF"
-            echo "$summary"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
+          from snowbot.memory.layout import MemoryLayout
+          from snowbot.validator.antigaming import run_anti_gaming
+          from snowbot.validator.runner import run_phase_validation
 
-      - name: Post architect summary comment
-        if: success()
+          root = Path.cwd()
+          base = os.environ["BASE_SHA"]
+          result = run_phase_validation(
+              MemoryLayout.from_project_root(root), os.environ["PHASE"], base_ref=base
+          )
+          findings = run_anti_gaming(root, base).findings
+          print(json.dumps({
+              "phase": result.phase,
+              "checks": [
+                  {"id": o.spec.id, "kind": o.spec.kind, "passed": o.passed, "message": o.message}
+                  for o in result.outcomes
+              ],
+              "findings": [{"code": f.code, "message": f.message} for f in findings],
+          }, sort_keys=True))
+          PY
+          set +e
+          "$RUNNER_TEMP/validator-venv/bin/snowbot" status --check > "$RUNNER_TEMP/status.txt" 2>&1
+          echo "$?" > "$RUNNER_TEMP/status.rc"
+          cat "$RUNNER_TEMP/status.txt"
+
+      - name: Decide verdict
+        id: decide
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          python3 - <<'PY'
+          import json, os, secrets
+          from pathlib import Path
+
+          tmp = Path(os.environ["RUNNER_TEMP"])
+          gate = json.loads((tmp / "gate.json").read_text())
+          status_ok = (tmp / "status.rc").read_text().strip() == "0"
+          governance = os.environ["HEAD_REF"].startswith("governance/")
+
+          failed = [c for c in gate["checks"] if not c["passed"] and c["kind"] != "anti_gaming_diff"]
+          blocking, notes = [], []
+          for finding in gate["findings"]:
+              if finding["code"] == "governance_mixed_with_product" and governance:
+                  notes.append(finding)
+              else:
+                  blocking.append(finding)
+          if failed or blocking or not status_ok:
+              verdict = "fail"
+          elif notes:
+              verdict = "pass_with_notes"
+          else:
+              verdict = "pass"
+
+          def cell(text):
+              return text.replace("|", "\\|").replace("\n", " ").replace("@", "@\u200b")
+
+          lines = [
+              "## architect-gate",
+              "",
+              f"**Verdict:** `{verdict}` · **Phase:** `{gate['phase']}` · "
+              f"**Head:** `{os.environ['HEAD_SHA'][:12]}`",
+              "",
+              "Validator and checklist taken from the PR base. Informational, not a PR approval.",
+              "",
+              "| Check | Result | Detail |",
+              "| ----- | ------ | ------ |",
+          ]
+          for c in gate["checks"]:
+              lines.append(f"| `{c['id']}` | {'pass' if c['passed'] else 'FAIL'} | {cell(c['message'])} |")
+          lines.append(f"| `status --check` | {'pass' if status_ok else 'FAIL'} | |")
+          for title, items in (("Blocking findings", blocking), ("Notes", notes)):
+              if items:
+                  lines += ["", f"### {title}", ""]
+                  lines += [f"- `{f['code']}`: {cell(f['message'])}" for f in items]
+          report = "\n".join(lines) + "\n"
+
+          (tmp / "report.md").write_text(report)
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+              summary.write(report)
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
+              out.write(f"verdict={verdict}\n")
+              eof = f"EOF_{secrets.token_hex(16)}"
+              out.write(f"report<<{eof}\n{report}{eof}\n")
+          print(report)
+          PY
+
+      - name: Fail on a fail verdict
+        if: steps.decide.outputs.verdict == 'fail'
+        run: exit 1
+
+  comment:
+    name: architect-gate comment
+    needs: architect-gate
+    if: always() && needs.architect-gate.outputs.report != ''
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Post the gate report (no PR code checked out)
         env:
           GH_TOKEN: ${{ github.token }}
-          VERDICT: ${{ steps.validate.outputs.verdict }}
-          PHASE: ${{ steps.phase.outputs.id }}
-          NOTES: ${{ steps.validate.outputs.summary }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPORT: ${{ needs.architect-gate.outputs.report }}
         run: |
-          body_file="$RUNNER_TEMP/architect-summary.md"
-          {
-            echo "## Senior Software Architect (CI)"
-            echo
-            echo "**Verdict:** \`${VERDICT}\`"
-            echo "**Phase:** \`${PHASE}\`"
-            echo "**Job:** \`architect-gate\`"
-            echo
-            echo "| Check | Result |"
-            echo "| ----- | ------ |"
-            echo "| ruff | pass |"
-            echo "| mypy | pass |"
-            echo "| pytest (≥85% cov) | pass |"
-            echo "| snowbot validate | pass |"
-            echo "| memory status | pass |"
-            echo
-            echo "This comment is informational only — it is **not** a GitHub PR approval."
-            if [[ -n "${NOTES:-}" ]]; then
-              echo
-              echo "${NOTES}"
-            fi
-          } > "$body_file"
-          gh pr comment "${{ github.event.pull_request.number }}" --body-file "$body_file"
+          printf '%s' "$REPORT" > "$RUNNER_TEMP/report.md"
+          gh pr comment "$PR_NUMBER" --body-file "$RUNNER_TEMP/report.md"
