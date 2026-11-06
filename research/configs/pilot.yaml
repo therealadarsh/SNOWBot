@@ -1,0 +1,41 @@
+# Pilot matrix. This file is data. Do not execute it as a study.
+# Nominal cost is 12 tasks x 5 arms x 1 model x 3 seeds x 1.50 USD = 270 USD,
+# which is above the 50 USD total. `python -m research run` must refuse.
+schema_version: 1
+catalog: research/tasks/catalog.yaml
+conditions: research/conditions.yaml
+oracle_rules: research/configs/oracle_rules.yaml
+tasks:
+  - cov-unreachable
+  - impossible-assert
+  - always-fail-test
+  - lint-frozen-line
+  - type-frozen-return
+  - ci-hold-step
+  - hook-false-entry
+  - codeowners-hold
+  - fix-operator
+  - fix-boundary
+  - fix-unused-import
+  - fix-return-type
+condition_ids:
+  - A0
+  - A1
+  - A2
+  - A3
+  - A4
+models:
+  # Documented Claude Code alias. Not invoked. 1.50 is an operator cap, not a price.
+  - id: haiku
+    provider: anthropic
+    agent: claude-code
+seeds: [1, 2, 3]
+budget:
+  total_usd: 50
+  per_run_usd: 1.50
+limits:
+  timeout_s: 600
+  max_turns: 30
+image:
+  ref: null
+  digest: null

@@ -1,0 +1,93 @@
+{
+  "notes": {
+    "claude": "GitHub release tag v2.1.312 observed 2026-10-28 from https://api.github.com/repos/anthropics/claude-code/releases/latest.",
+    "codex": "GitHub release tag rust-v0.165.0 observed 2026-10-28 from https://api.github.com/repos/openai/codex/releases/latest.",
+    "docker_image_digests": "pilot.yaml image.digest is null. Left unpinned rather than inventing a digest. Drift treats unpinned as outdated.",
+    "impossiblebench": "Pinned to upstream main d4f9a149db2b9cec0fed7bab01d91c07ee10aca2 observed 2026-10-28 from the public GitHub commits API (committer date 2026-10-13, message Update README.md). This repository does not vendor a fork; the pin is the commit a fork would track.",
+    "inspect": "PyPI inspect-ai 0.3.285 observed 2026-10-28 from https://pypi.org/pypi/inspect-ai/json.",
+    "pooling": "Results from different versions are never pooled. A change to the oracle, tasks, scanner commit, or conditions requires a new MAJOR.MINOR.PATCH.",
+    "scanner_commit": "Frozen SNOWBot commit 2165b01dd96174ff8c963afef82b86458ceb71c9 from research/configs/oracle_rules.yaml. Not tracked against moving main."
+  },
+  "paths": {
+    "conditions": "research/conditions.yaml",
+    "conditions_snapshot": "research/versions/current/snapshots/conditions.yaml",
+    "oracle_config": "research/configs/oracle_rules.yaml",
+    "oracle_config_snapshot": "research/versions/current/snapshots/oracle_rules.yaml",
+    "task_suite": "research/tasks/catalog.yaml",
+    "task_suite_snapshot": "research/versions/current/snapshots/catalog.yaml"
+  },
+  "pins": {
+    "agent_clis": {
+      "claude": "v2.1.312",
+      "codex": "rust-v0.165.0"
+    },
+    "conditions_sha256": "e19ab9636d88b626bb7e4e2d6a13143d988b93a824f228f9549419b4d0b829a4",
+    "docker_digest_status": "unpinned",
+    "docker_image_digests": [],
+    "impossiblebench_commit": "d4f9a149db2b9cec0fed7bab01d91c07ee10aca2",
+    "impossiblebench_status": "pinned",
+    "inspect_version": "0.3.285",
+    "model_ids": [
+      "haiku"
+    ],
+    "oracle_config_sha256": "67214365eb3c4e855e6584d45d5c86eb3e30a4c46aeb1abe1d1305c7ba85cd65",
+    "scanner_commit": "2165b01dd96174ff8c963afef82b86458ceb71c9",
+    "task_suite_sha256": "998bc4fc6ac42140c89b4b2d98fef165e700063e8098414c61104f3bbab4ecfc"
+  },
+  "results_policy": "results from different versions are never pooled",
+  "schema_version": 1,
+  "sources": [
+    {
+      "json_path": "tag_name",
+      "name": "agent_cli.claude",
+      "pin_path": "agent_clis.claude",
+      "status": "pinned",
+      "url": "https://api.github.com/repos/anthropics/claude-code/releases/latest"
+    },
+    {
+      "json_path": "tag_name",
+      "name": "agent_cli.codex",
+      "pin_path": "agent_clis.codex",
+      "status": "pinned",
+      "url": "https://api.github.com/repos/openai/codex/releases/latest"
+    },
+    {
+      "json_path": null,
+      "kind": "digest",
+      "name": "docker_image_digests",
+      "pin_path": "docker_digest_status",
+      "status": "unpinned",
+      "url": null
+    },
+    {
+      "json_path": "sha",
+      "name": "impossiblebench",
+      "pin_path": "impossiblebench_commit",
+      "status": "pinned",
+      "url": "https://api.github.com/repos/safety-research/impossiblebench/commits/main"
+    },
+    {
+      "json_path": "info.version",
+      "name": "inspect",
+      "pin_path": "inspect_version",
+      "status": "pinned",
+      "url": "https://pypi.org/pypi/inspect-ai/json"
+    },
+    {
+      "json_path": "retired",
+      "kind": "deprecation",
+      "name": "model_deprecation",
+      "pin_path": "model_ids",
+      "status": "pinned",
+      "url": null
+    },
+    {
+      "json_path": "sha",
+      "name": "scanner_commit",
+      "pin_path": "scanner_commit",
+      "status": "pinned",
+      "url": "https://api.github.com/repos/therealadarsh/SNOWBot/commits/2165b01dd96174ff8c963afef82b86458ceb71c9"
+    }
+  ],
+  "version": "0.1.0"
+}

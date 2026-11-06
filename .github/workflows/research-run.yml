@@ -1,0 +1,1257 @@
+# Research runs. Governance workflow: human merge only, never auto-merge.
+#
+# Triggers are workflow_dispatch and a weekly schedule. There is no pull_request
+# and no push trigger. Scheduled workflows run on the default branch only
+# (GitHub does not run `schedule` from any other ref).
+#
+# Inactivity (verified 2026-10-28 against current GitHub docs):
+# https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule
+#   "Scheduled workflows will only run on the default branch."
+#   "This event will only trigger a workflow run if the workflow file exists on the default branch."
+#   "In a public repository, scheduled workflows are automatically disabled when no
+#    repository activity has occurred in 60 days."
+# https://docs.github.com/en/actions/how-tos/manage-workflow-runs/disable-and-enable-workflows
+# A disabled workflow does not run, so this file cannot re-enable itself.
+# Re-enable from the Actions tab or: gh workflow enable research-run.yml
+# The schedule gate below records repository pushed_at age against that 60-day fact.
+#
+# Spend contract for files a later product PR adds. This workflow does not invent
+# aliases. research/STATUS.json:
+#   schedule: spend only when the value is exactly "active"
+#   kill: any present value other than JSON false blocks spend (JSON true, a
+#         string, a number, or null all count as the flag being set)
+#   version_state: this workflow sets "outdated" only by opening a draft PR
+# research/ledger.json:
+#   monthly_cap_usd: non-negative number; omitted means 50 USD
+#   months: object whose UTC "YYYY-MM" key is present and is either a
+#           non-negative number or an object with numeric spent_usd
+# A missing STATUS.json, a missing ledger.json, a missing month key, or a shape
+# this contract does not understand is fail-closed: exit 0, no model job.
+# This workflow does not declare version_state stable and does not write
+# schedule: paused or the kill flag into the default branch. A budget breach
+# opens an issue that states those fields; a human applies them.
+#
+# Product CLI (present only after the research harness merges):
+#   python -m research manifest --config research/configs/<name>.yaml
+#   python -m research run --manifest <path> --budget-usd <cap> --run-dir <path>
+#     --i-understand-the-budget
+#   python -m research extract --run-dir <path>
+# --budget-usd is required by the package. --run-dir and --i-understand-the-budget
+# are flags on that same CLI (research/cli.py). Scheduled runs pass the pilot
+# config only. The schedule never selects another config.
+# drift-check / archive entry points are called only when that CLI advertises
+# them with no required flags, or when research/archive.py is a __main__ module.
+# stability_* subcommands are not called.
+
+name: Research run
+
+on:
+  workflow_dispatch:
+    inputs:
+      config:
+        description: "Config name under research/configs, without .yaml. The schedule ignores this and uses pilot."
+        required: true
+        default: pilot
+        type: string
+      budget_usd:
+        description: "Budget cap in USD. Passed to research run --budget-usd. The schedule uses 50."
+        required: true
+        default: "50"
+        type: string
+      shard_count:
+        description: "Number of shard jobs, from 1 to 256. Each hosted job is limited to 6 hours. The schedule uses 1."
+        required: true
+        default: "1"
+        type: string
+  schedule:
+    # Weekly, Monday 06:17 UTC. Not minute 0: GitHub may drop cron jobs queued at
+    # the top of the hour during high load.
+    - cron: "17 6 * * 1"
+
+# No pull_request. No push. Token stays read-only unless a job overrides it.
+permissions:
+  contents: read
+
+concurrency:
+  group: research-run
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    outputs:
+      # A build output of the string "false" is non-empty, so it wins when that
+      # step ran. A skipped build step leaves the output null and the gate value is used.
+      spend: ${{ steps.build.outputs.spend || steps.gate.outputs.spend || 'false' }}
+      shards: ${{ steps.build.outputs.shards || '[]' }}
+      artifact: ${{ steps.build.outputs.artifact || '' }}
+    steps:
+      - name: Read research/STATUS.json and stop before spend
+        id: gate
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          GITHUB_REF: ${{ github.ref }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          INPUT_CONFIG: ${{ github.event.inputs.config }}
+          INPUT_BUDGET: ${{ github.event.inputs.budget_usd }}
+          INPUT_SHARDS: ${{ github.event.inputs.shard_count }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          import time
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+          from datetime import datetime, timezone
+
+          DEFAULT_MONTHLY_CAP_USD = 50.0
+          INACTIVITY_DAYS = 60
+          DOCS = (
+              "https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule",
+              "https://docs.github.com/en/actions/how-tos/manage-workflow-runs/disable-and-enable-workflows",
+          )
+
+          def as_money(value):
+              if isinstance(value, bool) or not isinstance(value, (int, float)):
+                  return None
+              if value < 0:
+                  return None
+              return float(value)
+
+          def month_spend(ledger, month):
+              months = ledger.get("months")
+              if not isinstance(months, dict) or month not in months:
+                  return None
+              entry = months[month]
+              if isinstance(entry, dict):
+                  if "spent_usd" not in entry:
+                      return None
+                  return as_money(entry["spent_usd"])
+              return as_money(entry)
+
+          def decide(status, ledger, month):
+              if status is None:
+                  return False, "research/STATUS.json is missing; not spending"
+              if not isinstance(status, dict):
+                  return False, "research/STATUS.json is not an object; not spending"
+              if status.get("schedule") != "active":
+                  return False, "schedule is not active; not spending"
+              if "kill" in status and status.get("kill") is not False:
+                  return False, "kill flag is set; not spending"
+              if ledger is None:
+                  return False, "research/ledger.json is missing; not spending"
+              if not isinstance(ledger, dict):
+                  return False, "research/ledger.json is not an object; not spending"
+              cap = as_money(ledger.get("monthly_cap_usd", DEFAULT_MONTHLY_CAP_USD))
+              if cap is None:
+                  return False, "monthly cap is not a non-negative number; not spending"
+              spent = month_spend(ledger, month)
+              if spent is None:
+                  return False, "month spend is missing or not a non-negative number; not spending"
+              if spent + 1e-9 >= cap:
+                  return False, "month spend is at or over the monthly cap; not spending"
+              return True, "spend gate open"
+
+          def note(text):
+              print(text)
+              summary = os.environ.get("GITHUB_STEP_SUMMARY")
+              if summary:
+                  with open(summary, "a", encoding="utf-8") as handle:
+                      handle.write(text + "\n")
+
+          def output(name, value):
+              with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
+                  handle.write(f"{name}={value}\n")
+
+          def request_json(url):
+              token = os.environ.get("GITHUB_TOKEN", "")
+              last_error = None
+              for attempt in range(1, 4):
+                  req = urllib.request.Request(
+                      url,
+                      headers={
+                          "Accept": "application/vnd.github+json",
+                          "Authorization": f"Bearer {token}",
+                          "User-Agent": "snowbot-research-run",
+                          "X-GitHub-Api-Version": "2022-11-28",
+                      },
+                  )
+                  try:
+                      with urllib.request.urlopen(req, timeout=30) as response:
+                          return response.status, json.loads(response.read().decode("utf-8"))
+                  except urllib.error.HTTPError as exc:
+                      if exc.code == 404:
+                          return 404, None
+                      last_error = exc
+                      if exc.code not in {429, 500, 502, 503}:
+                          raise
+                  except (urllib.error.URLError, TimeoutError) as exc:
+                      last_error = exc
+                  if attempt < 3:
+                      time.sleep(attempt * 5)
+              raise RuntimeError(f"infrastructure failure reading GitHub API: {last_error}")
+
+          def record_inactivity():
+              note(
+                  "GitHub documents that scheduled workflows run only on the default branch, "
+                  "and that in a public repository they are automatically disabled when no "
+                  f"repository activity has occurred in {INACTIVITY_DAYS} days. "
+                  "A disabled workflow does not run, so this job cannot re-enable itself. "
+                  "Re-enable with: gh workflow enable research-run.yml"
+              )
+              for url in DOCS:
+                  note(url)
+              repo = os.environ["GITHUB_REPOSITORY"]
+              try:
+                  status, payload = request_json(f"https://api.github.com/repos/{repo}")
+              except Exception as exc:
+                  note(f"inactivity check could not read pushed_at ({exc}); spend gate still applies")
+                  return
+              if status != 200 or not isinstance(payload, dict):
+                  note("inactivity check did not receive repository JSON; spend gate still applies")
+                  return
+              pushed = payload.get("pushed_at")
+              if not isinstance(pushed, str):
+                  note("repository pushed_at was absent")
+                  return
+              when = datetime.fromisoformat(pushed.replace("Z", "+00:00"))
+              age_days = (datetime.now(timezone.utc) - when).days
+              note(f"repository pushed_at={pushed} age_days={age_days}")
+              if age_days >= INACTIVITY_DAYS:
+                  note(
+                      "pushed_at is at least 60 days old. If this run is workflow_dispatch, "
+                      "the schedule may already be disabled. Re-enable with: "
+                      "gh workflow enable research-run.yml"
+                  )
+
+          def fetch_json_file(path):
+              repo = os.environ["GITHUB_REPOSITORY"]
+              sha = os.environ["GITHUB_SHA"]
+              query = urllib.parse.urlencode({"ref": sha})
+              url = f"https://api.github.com/repos/{repo}/contents/{path}?{query}"
+              status, payload = request_json(url)
+              if status == 404 or payload is None:
+                  return None
+              if not isinstance(payload, dict) or payload.get("encoding") != "base64":
+                  raise RuntimeError(f"{path} was not a base64 file response")
+              import base64
+
+              raw = base64.b64decode(payload.get("content", ""))
+              try:
+                  loaded = json.loads(raw.decode("utf-8"))
+              except (UnicodeError, json.JSONDecodeError) as exc:
+                  note(f"{path} is not JSON ({exc}); not spending")
+                  return False
+              return loaded
+
+          def parse_dispatch():
+              name = os.environ.get("INPUT_CONFIG", "").strip()
+              budget_text = os.environ.get("INPUT_BUDGET", "").strip()
+              shard_text = os.environ.get("INPUT_SHARDS", "").strip()
+              if not name or "/" in name or "\\" in name or name in {".", ".."}:
+                  raise SystemExit("config name must be a single file stem under research/configs")
+              allowed = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-")
+              if len(name) > 64 or any(char not in allowed for char in name):
+                  raise SystemExit("config name has characters this workflow will not accept")
+              try:
+                  budget = float(budget_text)
+              except ValueError:
+                  raise SystemExit("budget_usd must be a number") from None
+              if isinstance(budget, bool) or budget < 0:
+                  raise SystemExit("budget_usd must be non-negative")
+              try:
+                  shards = int(shard_text)
+              except ValueError:
+                  raise SystemExit("shard_count must be an integer") from None
+              if shards < 1 or shards > 256:
+                  raise SystemExit("shard_count must be from 1 to 256")
+              return name, budget, shards
+
+          record_inactivity()
+          event = os.environ["EVENT_NAME"]
+          ref = os.environ["GITHUB_REF"]
+          default_branch = os.environ.get("DEFAULT_BRANCH") or "main"
+          output("config_name", "pilot")
+          output("budget_usd", "50")
+          output("shard_count", "1")
+          output("spend", "false")
+          if event == "schedule" and ref != f"refs/heads/{default_branch}":
+              note("schedule ref is not the default branch; not spending")
+              raise SystemExit(0)
+          if event == "schedule":
+              config_name, budget, shard_count = "pilot", 50.0, 1
+          elif event == "workflow_dispatch":
+              config_name, budget, shard_count = parse_dispatch()
+          else:
+              note(f"event {event} is not a spend trigger; not spending")
+              raise SystemExit(0)
+          output("config_name", config_name)
+          output("budget_usd", repr(budget))
+          output("shard_count", str(shard_count))
+          month = datetime.now(timezone.utc).strftime("%Y-%m")
+          try:
+              status = fetch_json_file("research/STATUS.json")
+              ledger = fetch_json_file("research/ledger.json")
+          except Exception as exc:
+              note(f"could not read spend files ({exc}); failing closed without a model job")
+              raise SystemExit(1) from exc
+          if status is False or ledger is False:
+              note("spend file was not JSON; not spending")
+              raise SystemExit(0)
+          allowed, reason = decide(status, ledger, month)
+          note(reason)
+          if not allowed:
+              raise SystemExit(0)
+          if not isinstance(status, dict) or not isinstance(ledger, dict):
+              raise SystemExit(0)
+          cap = as_money(ledger.get("monthly_cap_usd", DEFAULT_MONTHLY_CAP_USD))
+          spent = month_spend(ledger, month)
+          if cap is None or spent is None:
+              note("cap or spend disappeared after the gate; not spending")
+              raise SystemExit(0)
+          remaining = cap - spent
+          authorized = min(budget, remaining)
+          if authorized <= 0:
+              note("no monthly budget remaining; not spending")
+              raise SystemExit(0)
+          output("authorized_usd", repr(authorized))
+          output("spend", "true")
+          note(f"authorized_usd={authorized:.2f} config={config_name} shards={shard_count}")
+          PY
+
+      - name: Checkout
+        if: steps.gate.outputs.spend == 'true'
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Set up Python
+        if: steps.gate.outputs.spend == 'true'
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install package
+        if: steps.gate.outputs.spend == 'true'
+        run: |
+          set -euo pipefail
+          retry_infra() {
+            local attempt=1
+            until "$@"; do
+              if [[ "$attempt" -ge 3 ]]; then
+                echo "infrastructure command failed after 3 attempts" >&2
+                return 1
+              fi
+              sleep $((attempt * 5))
+              attempt=$((attempt + 1))
+            done
+          }
+          retry_infra python3 -m pip install --upgrade pip
+          retry_infra python3 -m pip install -e .
+
+      - name: Write and hash the manifest
+        id: build
+        if: steps.gate.outputs.spend == 'true'
+        env:
+          CONFIG_NAME: ${{ steps.gate.outputs.config_name }}
+          AUTHORIZED_USD: ${{ steps.gate.outputs.authorized_usd }}
+          SHARD_COUNT: ${{ steps.gate.outputs.shard_count }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          import subprocess
+          import sys
+          from pathlib import Path
+
+          def output(name, value):
+              with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
+                  handle.write(f"{name}={value}\n")
+
+          def hold(reason):
+              print(reason)
+              output("spend", "false")
+              output("shards", "[]")
+              output("artifact", "")
+              raise SystemExit(0)
+
+          event = os.environ["EVENT_NAME"]
+          config_name = os.environ["CONFIG_NAME"]
+          if not Path("research/__main__.py").is_file():
+              hold("research package is absent; not spending and no provider was called")
+          if event == "schedule":
+              config_name = "pilot"
+          root = Path("research/configs").resolve()
+          config = (root / f"{config_name}.yaml").resolve()
+          if config.parent != root or config.suffix != ".yaml" or not config.is_file():
+              raise SystemExit("config is not a file directly under research/configs")
+          if event == "schedule" and config.name != "pilot.yaml":
+              raise SystemExit("schedule may only run research/configs/pilot.yaml")
+          authorized = float(os.environ["AUTHORIZED_USD"])
+          shard_count = int(os.environ["SHARD_COUNT"])
+          if event == "schedule":
+              shard_count = 1
+          if shard_count < 1 or shard_count > 256:
+              raise SystemExit("shard_count must be from 1 to 256")
+          dest = Path("manifest-dist")
+          dest.mkdir(parents=True, exist_ok=True)
+          manifest_path = dest / "manifest.json"
+          # Outcome command: not retried.
+          proc = subprocess.run(
+              [sys.executable, "-m", "research", "manifest", "--config", str(config)],
+              check=False,
+              capture_output=True,
+              text=True,
+          )
+          if proc.returncode != 0:
+              sys.stdout.write(proc.stdout)
+              sys.stderr.write(proc.stderr)
+              raise SystemExit(proc.returncode)
+          if proc.stderr:
+              sys.stderr.write(proc.stderr)
+          manifest_path.write_text(proc.stdout, encoding="utf-8")
+          file_hash = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+          (dest / "manifest.sha256").write_text(file_hash + "\n", encoding="utf-8")
+          payload = json.loads(proc.stdout)
+          internal = payload.get("manifest_sha256")
+          if not isinstance(internal, str):
+              raise SystemExit("manifest is missing manifest_sha256")
+          (dest / "manifest-internal.sha256").write_text(internal + "\n", encoding="utf-8")
+          from research.budget import budget_allows, nominal_cost
+          from research.manifest import load_manifest, manifest_digest, write_manifest
+
+          loaded = load_manifest(manifest_path)
+          count = loaded["cell_count"]
+          per_run = loaded["budget"]["per_run_usd"]
+          if isinstance(count, bool) or not isinstance(count, int):
+              raise SystemExit("cell_count is not an integer")
+          if isinstance(per_run, bool) or not isinstance(per_run, (int, float)):
+              raise SystemExit("per_run_usd is not a number")
+          if count < 0 or float(per_run) < 0:
+              raise SystemExit("manifest counts must be non-negative")
+          nominal = nominal_cost(count, float(per_run))
+          print(f"manifest_sha256={internal} file_sha256={file_hash} nominal_usd={nominal:.4f}")
+          if count == 0 or not budget_allows(count, float(per_run), authorized):
+              hold(
+                  f"hold: nominal {nominal:.2f} USD is above authorized {authorized:.2f} USD "
+                  "or the matrix is empty; research run was not started and no provider was called"
+              )
+          cells = loaded["cells"]
+          if not isinstance(cells, list) or len(cells) != count:
+              raise SystemExit("manifest cells do not match cell_count")
+          groups = [cells[index::shard_count] for index in range(shard_count)]
+          groups = [group for group in groups if group]
+          if not groups or len(groups) > 256:
+              raise SystemExit("shard matrix is empty or above 256 jobs")
+          shard_indexes = []
+          summed = 0.0
+          for index, group in enumerate(groups):
+              body = json.loads(json.dumps(loaded))
+              body.pop("manifest_sha256", None)
+              shard_nominal = nominal_cost(len(group), float(per_run))
+              budget = dict(body["budget"])
+              budget["nominal_usd"] = shard_nominal
+              budget["budget_satisfied"] = budget_allows(len(group), float(per_run), shard_nominal)
+              body["budget"] = budget
+              body["cells"] = group
+              body["cell_count"] = len(group)
+              body["manifest_sha256"] = manifest_digest(body)
+              shard_path = dest / f"shard-{index}.json"
+              write_manifest(body, shard_path)
+              load_manifest(shard_path)
+              (dest / f"shard-{index}.budget").write_text(repr(float(shard_nominal)) + "\n", encoding="utf-8")
+              summed += float(shard_nominal)
+              shard_indexes.append(index)
+          if abs(summed - float(nominal)) > 1e-6 or summed - authorized > 1e-6:
+              raise SystemExit("shard budgets do not fit the authorized cap")
+          output("spend", "true")
+          output("shards", json.dumps(shard_indexes))
+          output("file_sha", file_hash)
+          output(
+              "artifact",
+              "research-manifest-"
+              + os.environ["GITHUB_RUN_ID"]
+              + "-"
+              + os.environ["GITHUB_RUN_ATTEMPT"]
+              + "-"
+              + file_hash,
+          )
+          PY
+
+      - name: Upload hashed manifest
+        if: steps.build.outputs.spend == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.build.outputs.artifact }}
+          path: manifest-dist/
+          if-no-files-found: error
+          overwrite: false
+          retention-days: 90
+
+  model-proxy:
+    name: model-proxy
+    needs: plan
+    if: needs.plan.result == 'success' && needs.plan.outputs.spend == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install package
+        run: |
+          set -euo pipefail
+          attempt=1
+          until python3 -m pip install -e .; do
+            if [[ "$attempt" -ge 3 ]]; then
+              echo "infrastructure command failed after 3 attempts" >&2
+              exit 1
+            fi
+            sleep $((attempt * 5))
+            attempt=$((attempt + 1))
+          done
+
+      - name: Detect model proxy entry point
+        id: detect
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          import re
+          import subprocess
+          import sys
+          from pathlib import Path
+
+          def subcommands(help_text):
+              match = re.search(r"\{([^}]+)\}", help_text)
+              if not match:
+                  return set()
+              return {part.strip() for part in match.group(1).split(",") if part.strip()}
+
+          def required_flags(help_text):
+              found = []
+              for line in help_text.splitlines():
+                  stripped = line.strip()
+                  if not stripped.startswith("--") or stripped.startswith("--help"):
+                      continue
+                  found.append(stripped.split()[0])
+              return found
+
+          mode = "none"
+          proc = subprocess.run(
+              [sys.executable, "-m", "research", "--help"],
+              check=False,
+              capture_output=True,
+              text=True,
+          )
+          names = subcommands(proc.stdout)
+          if "proxy" in names:
+              proxy_help = subprocess.run(
+                  [sys.executable, "-m", "research", "proxy", "--help"],
+                  check=False,
+                  capture_output=True,
+                  text=True,
+              )
+              if proxy_help.returncode == 0 and not required_flags(proxy_help.stdout):
+                  mode = "cli"
+          proxy_py = Path("research/proxy.py")
+          if mode == "none" and proxy_py.is_file():
+              text = proxy_py.read_text(encoding="utf-8")
+              if "if __name__" in text and "__main__" in text:
+                  mode = "module"
+          print(f"model proxy mode={mode}")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
+              handle.write(f"mode={mode}\n")
+          PY
+
+      - name: Model proxy
+        if: steps.detect.outputs.mode != 'none'
+        env:
+          PROXY_MODE: ${{ steps.detect.outputs.mode }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+        run: |
+          set -euo pipefail
+          # Keys exist only in this step. Do not write them to disk, GITHUB_ENV, or logs.
+          # This step must not execute research run or agent-written code.
+          set +x
+          if [[ "$PROXY_MODE" == "cli" ]]; then
+            python3 -m research proxy
+          elif [[ "$PROXY_MODE" == "module" ]]; then
+            python3 -m research.proxy
+          else
+            echo "no model proxy entry point" >&2
+            exit 1
+          fi
+
+  run:
+    name: run
+    needs: [plan, model-proxy]
+    if: needs.plan.result == 'success' && needs.plan.outputs.spend == 'true' && needs.model-proxy.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: true
+      max-parallel: 256
+      matrix:
+        shard: ${{ fromJson(needs.plan.outputs.shards) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install package
+        run: |
+          set -euo pipefail
+          attempt=1
+          until python3 -m pip install -e .; do
+            if [[ "$attempt" -ge 3 ]]; then
+              echo "infrastructure command failed after 3 attempts" >&2
+              exit 1
+            fi
+            sleep $((attempt * 5))
+            attempt=$((attempt + 1))
+          done
+
+      - name: Download manifest
+        uses: actions/download-artifact@v7
+        with:
+          name: ${{ needs.plan.outputs.artifact }}
+          path: manifest-dist
+
+      - name: Run shard
+        id: cells
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$SHARD" =~ ^[0-9]+$ ]]; then
+            echo "shard index is not an integer" >&2
+            exit 1
+          fi
+          shard_number=$((10#$SHARD))
+          if [[ "$shard_number" -gt 255 ]]; then
+            echo "shard index is above 255" >&2
+            exit 1
+          fi
+          mkdir -p "shard-output"
+          log="shard-output/shard-${shard_number}-stdout.log"
+          : > "$log"
+          unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN OPENAI_API_KEY AWS_SECRET_ACCESS_KEY CURSOR_API_KEY GITHUB_TOKEN GH_TOKEN || true
+          python3 - <<'PY'
+          import os
+          import sys
+
+          banned = {
+              "ANTHROPIC_API_KEY",
+              "ANTHROPIC_AUTH_TOKEN",
+              "OPENAI_API_KEY",
+              "AWS_SECRET_ACCESS_KEY",
+              "CURSOR_API_KEY",
+              "GITHUB_TOKEN",
+              "GH_TOKEN",
+          }
+          suffixes = ("_API_KEY", "_AUTH_TOKEN", "_SECRET", "_PASSWORD")
+          found = sorted(key for key in os.environ if key in banned or key.endswith(suffixes))
+          if found:
+              print("refusing to start; credential names are present: " + ", ".join(found), file=sys.stderr)
+              raise SystemExit(1)
+          PY
+          manifest="manifest-dist/shard-${shard_number}.json"
+          budget_file="manifest-dist/shard-${shard_number}.budget"
+          budget="$(tr -d '[:space:]' < "$budget_file")"
+          run_dir="shard-output/shard-${shard_number}-run"
+          # Sandboxes are the harness boundary: docker run --network none and
+          # Inspect network_mode none. This step has no provider keys.
+          # research run is an outcome: it is not retried.
+          set +e
+          python3 -m research run \
+            --manifest "$manifest" \
+            --budget-usd "$budget" \
+            --run-dir "$run_dir" \
+            --i-understand-the-budget \
+            >"$log" 2>&1
+          rc=$?
+          set -e
+          cat "$log"
+          python3 - <<PY
+          import json
+          import os
+          import pathlib
+          import sys
+
+          log = pathlib.Path("$log").read_text(encoding="utf-8", errors="replace").lower()
+          rc = int("$rc")
+          shard = int("$shard_number")
+          if rc == 0:
+              kind = "ok"
+          elif "no provider was called" in log or "refusing to start" in log or "refusing to execute agent" in log:
+              kind = "hold"
+          elif rc == 2 and ("would be exceeded" in log or ("budget" in log and "exceed" in log)):
+              kind = "breach"
+          else:
+              kind = "fail"
+          print(f"shard {shard} class={kind} exit={rc}")
+          out = os.environ["GITHUB_OUTPUT"]
+          with open(out, "a", encoding="utf-8") as handle:
+              handle.write("breach=" + ("true" if kind == "breach" else "false") + "\n")
+          if kind == "breach":
+              pathlib.Path("breach-sentinel.json").write_text(
+                  json.dumps({"kind": "budget-breach", "shard": shard}) + "\n",
+                  encoding="utf-8",
+              )
+              raise SystemExit(1)
+          if kind == "fail":
+              raise SystemExit(rc if rc else 1)
+          raise SystemExit(0)
+          PY
+
+      - name: Upload shard logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: research-shard-${{ matrix.shard }}-logs-${{ github.run_id }}-${{ github.run_attempt }}
+          path: shard-output/
+          if-no-files-found: error
+          overwrite: false
+          retention-days: 90
+
+      - name: Upload budget breach sentinel
+        if: always() && steps.cells.outputs.breach == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: research-budget-breach-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: breach-sentinel.json
+          if-no-files-found: error
+          overwrite: false
+          retention-days: 90
+
+  collect:
+    name: collect
+    needs: [plan, run]
+    if: always() && needs.plan.result == 'success' && needs.plan.outputs.spend == 'true' && (needs.run.result == 'success' || needs.run.result == 'failure')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install package
+        run: |
+          set -euo pipefail
+          attempt=1
+          until python3 -m pip install -e .; do
+            if [[ "$attempt" -ge 3 ]]; then
+              exit 1
+            fi
+            sleep $((attempt * 5))
+            attempt=$((attempt + 1))
+          done
+
+      - name: Download shard outputs
+        uses: actions/download-artifact@v7
+        with:
+          pattern: research-shard-*-logs-${{ github.run_id }}-${{ github.run_attempt }}
+          path: collected
+          merge-multiple: true
+
+      - name: Merge and hash logs
+        id: logs
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import os
+          from pathlib import Path
+
+          logs = sorted(Path("collected").glob("shard-*-stdout.log"))
+          if not logs:
+              raise SystemExit("no shard logs to hash")
+          merged = Path("merged-logs.txt")
+          digest = hashlib.sha256()
+          with merged.open("wb") as handle:
+              for path in logs:
+                  header = f"===== {path.name} =====\n".encode()
+                  body = path.read_bytes()
+                  handle.write(header)
+                  handle.write(body)
+                  if not body.endswith(b"\n"):
+                      handle.write(b"\n")
+          file_hash = hashlib.sha256(merged.read_bytes()).hexdigest()
+          Path("merged-logs.sha256").write_text(file_hash + "\n", encoding="utf-8")
+          print(f"merged_log_sha256={file_hash}")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
+              handle.write(f"sha={file_hash}\n")
+          PY
+
+      - name: Upload write-once merged logs
+        uses: actions/upload-artifact@v7
+        with:
+          name: research-logs-${{ github.run_id }}-${{ github.run_attempt }}-${{ steps.logs.outputs.sha }}
+          path: |
+            merged-logs.txt
+            merged-logs.sha256
+          if-no-files-found: error
+          overwrite: false
+          retention-days: 90
+
+      - name: Extract
+        if: needs.run.result == 'success'
+        run: |
+          set -euo pipefail
+          if [[ ! -d collected ]]; then
+            echo "no run directory; extract skipped"
+            exit 0
+          fi
+          # Outcome command: not retried. extract does not call a model.
+          python3 -m research extract --run-dir collected
+
+      - name: Upload extract outputs
+        if: needs.run.result == 'success'
+        uses: actions/upload-artifact@v7
+        with:
+          name: research-extract-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            collected/results.jsonl
+            collected/summary.csv
+            collected/tables.md
+            collected/label_sample.csv
+          if-no-files-found: error
+          overwrite: false
+          retention-days: 90
+
+  budget-breach:
+    name: budget-breach
+    needs: run
+    if: always() && needs.run.result == 'failure'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+      actions: read
+    steps:
+      - name: Download breach sentinels
+        id: download
+        continue-on-error: true
+        uses: actions/download-artifact@v7
+        with:
+          pattern: research-budget-breach-*
+          path: breach-sentinel
+          merge-multiple: true
+
+      - name: Open issue and stop further spends
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          DOWNLOAD_OUTCOME: ${{ steps.download.outcome }}
+        run: |
+          set -euo pipefail
+          if [[ "$DOWNLOAD_OUTCOME" == "failure" ]]; then
+            echo "no breach artifact; not pausing the schedule"
+            exit 0
+          fi
+          python3 - <<'PY'
+          import json
+          import pathlib
+
+          root = pathlib.Path("breach-sentinel")
+          shards = []
+          if root.is_dir():
+              for path in sorted(root.rglob("*.json")):
+                  try:
+                      data = json.loads(path.read_text(encoding="utf-8"))
+                  except json.JSONDecodeError:
+                      continue
+                  if not isinstance(data, dict) or data.get("kind") != "budget-breach":
+                      continue
+                  shard = data.get("shard")
+                  if isinstance(shard, bool) or not isinstance(shard, int):
+                      continue
+                  shards.append(shard)
+          marker = pathlib.Path("breach-shards.txt")
+          if not shards:
+              print("run failed without a budget-breach sentinel; not pausing the schedule")
+              marker.write_text("", encoding="utf-8")
+          else:
+              print("budget breach shards: " + ",".join(str(shard) for shard in shards))
+              marker.write_text(",".join(str(shard) for shard in shards) + "\n", encoding="utf-8")
+          PY
+          if [[ ! -s breach-shards.txt ]]; then
+            exit 0
+          fi
+          title="research budget breach: set schedule paused and kill"
+          existing="$(gh issue list --state open --limit 50 --json number,title --jq '.[] | select(.title=="research budget breach: set schedule paused and kill") | .number' | head -n 1)"
+          if [[ -n "${existing}" ]]; then
+            echo "open breach issue #${existing}; not filing a duplicate"
+            exit 1
+          fi
+          body_file="$RUNNER_TEMP/breach-issue.md"
+          cat > "$body_file" <<EOF
+          A research run exceeded its budget. This workflow did not call further model jobs and did not commit to the default branch.
+
+          A human must set these fields in \`research/STATUS.json\` and merge that change:
+
+          - schedule: paused
+          - kill: true
+
+          Automation will not merge. This workflow will not write those fields itself.
+
+          Run: ${RUN_URL}
+          EOF
+          gh issue create --title "$title" --body-file "$body_file"
+          exit 1
+
+  drift-check:
+    name: drift-check
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: true
+          fetch-depth: 1
+          ref: ${{ github.sha }}
+
+      - name: Set up Python
+        if: hashFiles('research/__main__.py') != ''
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install package for drift entry points
+        if: hashFiles('research/__main__.py') != ''
+        run: |
+          set -euo pipefail
+          attempt=1
+          until python3 -m pip install -e .; do
+            if [[ "$attempt" -ge 3 ]]; then
+              echo "infrastructure command failed after 3 attempts" >&2
+              exit 1
+            fi
+            sleep $((attempt * 5))
+            attempt=$((attempt + 1))
+          done
+
+      - name: Compare pins without calling a model
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          GITHUB_REF: ${{ github.ref }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import os
+          import re
+          import subprocess
+          import sys
+          from pathlib import Path
+
+          ALLOWED = {"drift-check", "drift_check", "archive", "archiver"}
+          DENIED = {"manifest", "run", "extract", "proxy"}
+
+          def sha256_file(path: Path) -> str:
+              return hashlib.sha256(path.read_bytes()).hexdigest()
+
+          def pin_mismatches(root: Path) -> list[str]:
+              mismatches = []
+              research = root / "research"
+              if not research.is_dir():
+                  return mismatches
+              for pin in sorted(research.rglob("*.sha256")):
+                  text = pin.read_text(encoding="utf-8").strip().lower()
+                  rel = pin.relative_to(root).as_posix()
+                  if not re.fullmatch(r"[0-9a-f]{64}", text):
+                      mismatches.append(f"{rel} is not a sha256 pin")
+                      continue
+                  stem = pin.with_suffix("")
+                  sibling = stem if stem.is_file() else None
+                  if sibling is None:
+                      for ext in (".yaml", ".yml", ".json"):
+                          candidate = stem.with_suffix(ext)
+                          if candidate.is_file():
+                              sibling = candidate
+                              break
+                  if sibling is None:
+                      mismatches.append(f"{rel} has no sibling file to compare")
+                      continue
+                  actual = sha256_file(sibling)
+                  if actual != text:
+                      mismatches.append(f"{rel} expected {text} actual {actual}")
+              return mismatches
+
+          def subcommands(help_text: str) -> set[str]:
+              match = re.search(r"\{([^}]+)\}", help_text)
+              if not match:
+                  return set()
+              return {part.strip() for part in match.group(1).split(",") if part.strip()}
+
+          def required_flags(help_text: str) -> list[str]:
+              found = []
+              for line in help_text.splitlines():
+                  stripped = line.strip()
+                  if stripped.startswith("--") and not stripped.startswith("--help"):
+                      found.append(stripped.split()[0])
+              return found
+
+          def discard_research_edits() -> None:
+              subprocess.run(["git", "checkout", "--", "research"], check=False)
+              subprocess.run(["git", "clean", "-fd", "research"], check=False)
+
+          def call_optional(root: Path) -> str | None:
+              if not (root / "research" / "__main__.py").is_file():
+                  print("research package is absent; drift and archive entry points no-op")
+                  return None
+              proc = subprocess.run(
+                  [sys.executable, "-m", "research", "--help"],
+                  check=False,
+                  capture_output=True,
+                  text=True,
+              )
+              names = subcommands(proc.stdout)
+              unexpected = None
+              for name in sorted(names):
+                  if name in DENIED or name.startswith("stability"):
+                      print(f"not calling {name}")
+                      continue
+                  if name not in ALLOWED:
+                      continue
+                  help_proc = subprocess.run(
+                      [sys.executable, "-m", "research", name, "--help"],
+                      check=False,
+                      capture_output=True,
+                      text=True,
+                  )
+                  if help_proc.returncode != 0 or required_flags(help_proc.stdout):
+                      print(f"{name} requires flags this workflow will not invent; not calling it")
+                      continue
+                  print(f"calling python -m research {name}")
+                  ran = subprocess.run(
+                      [sys.executable, "-m", "research", name],
+                      check=False,
+                      capture_output=True,
+                      text=True,
+                  )
+                  sys.stdout.write(ran.stdout)
+                  sys.stderr.write(ran.stderr)
+                  combined = (ran.stdout + ran.stderr).lower()
+                  folded = combined.replace(" ", "")
+                  if ran.returncode != 0 and "extensionnotinthispullrequest" not in folded and "not implemented" not in combined:
+                      unexpected = f"{name} exited {ran.returncode}"
+              archive = root / "research" / "archive.py"
+              if archive.is_file() and "archive" not in names and "archiver" not in names:
+                  text = archive.read_text(encoding="utf-8")
+                  if "if __name__" in text and "__main__" in text:
+                      print("calling python -m research.archive")
+                      ran = subprocess.run(
+                          [sys.executable, "-m", "research.archive"],
+                          check=False,
+                          capture_output=True,
+                          text=True,
+                      )
+                      sys.stdout.write(ran.stdout)
+                      sys.stderr.write(ran.stderr)
+                      combined = (ran.stdout + ran.stderr).lower()
+                      if ran.returncode != 0 and "not implemented" not in combined:
+                          unexpected = f"research.archive exited {ran.returncode}"
+              discard_research_edits()
+              return unexpected
+
+          root = Path(".").resolve()
+          mismatches = pin_mismatches(root)
+          unexpected = call_optional(root)
+          if not mismatches:
+              print("pins match; this workflow does not declare version_state stable")
+              if unexpected:
+                  raise SystemExit(unexpected)
+              raise SystemExit(0)
+          print("pin drift:")
+          for line in mismatches:
+              print(line)
+          detail = Path(os.environ.get("RUNNER_TEMP", "/tmp")) / "drift.txt"
+          detail.write_text("\n".join(mismatches) + "\n", encoding="utf-8")
+          marker = root / ".drift-open"
+          marker.write_text("outdated\n", encoding="utf-8")
+          if unexpected:
+              Path(os.environ.get("RUNNER_TEMP", "/tmp"), "drift-command-error.txt").write_text(
+                  unexpected + "\n", encoding="utf-8"
+              )
+          print("drift detected; issue and draft pull request follow")
+          PY
+          if [[ ! -f .drift-open ]]; then
+            exit 0
+          fi
+          rm -f .drift-open
+          title="research version_state: outdated"
+          existing_issue="$(gh issue list --state open --limit 50 --json number,title --jq '.[] | select(.title=="research version_state: outdated") | .number' | head -n 1)"
+          if [[ -z "${existing_issue}" ]]; then
+            body_file="$RUNNER_TEMP/drift-issue.md"
+            {
+              echo "Research pins drifted. This job did not call a model and did not push to the default branch."
+              echo
+              echo "A human may merge a draft pull request that sets \`version_state: outdated\` under \`research/\` only."
+              echo "Automation will not merge. This job does not declare stable and does not pause the schedule."
+              echo
+              echo "Mismatches:"
+              echo
+              echo '```'
+              cat "$RUNNER_TEMP/drift.txt"
+              echo '```'
+              echo
+              echo "Run: ${RUN_URL}"
+            } > "$body_file"
+            gh issue create --title "$title" --body-file "$body_file"
+          else
+            echo "open drift issue #${existing_issue}"
+          fi
+          default_branch="${DEFAULT_BRANCH:-main}"
+          if [[ "$GITHUB_REF" != "refs/heads/${default_branch}" ]]; then
+            echo "not opening a pull request from a non-default ref"
+            if [[ -f "$RUNNER_TEMP/drift-command-error.txt" ]]; then
+              exit 1
+            fi
+            exit 0
+          fi
+          branch="research/version-outdated-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          if [[ "$branch" == "$default_branch" || "$branch" == "main" || "$branch" == "master" ]]; then
+            echo "refusing to push the default branch" >&2
+            exit 1
+          fi
+          python3 - <<'PY'
+          import json
+          import subprocess
+          from pathlib import Path
+
+          path = Path("research/STATUS.json")
+          if path.is_file():
+              try:
+                  original = json.loads(path.read_text(encoding="utf-8"))
+              except json.JSONDecodeError:
+                  raise SystemExit("research/STATUS.json is not JSON; not editing it")
+              if not isinstance(original, dict):
+                  raise SystemExit("research/STATUS.json is not an object; not editing it")
+              if original.get("version_state") == "outdated":
+                  Path(".drift-pr-skip").write_text("already\n", encoding="utf-8")
+                  raise SystemExit(0)
+              original["version_state"] = "outdated"
+              updated = original
+          else:
+              updated = {"version_state": "outdated"}
+          path.parent.mkdir(parents=True, exist_ok=True)
+          path.write_text(json.dumps(updated, indent=2) + "\n", encoding="utf-8")
+          show = subprocess.run(
+              ["git", "show", "HEAD:research/STATUS.json"],
+              check=False,
+              capture_output=True,
+              text=True,
+          )
+          if show.returncode != 0:
+              if set(updated) != {"version_state"}:
+                  raise SystemExit("new STATUS.json would contain more than version_state")
+          else:
+              before = json.loads(show.stdout)
+              for key, value in before.items():
+                  if key == "version_state":
+                      continue
+                  if updated.get(key) != value:
+                      raise SystemExit(f"refusing to change {key}")
+              extras = set(updated) - set(before) - {"version_state"}
+              if extras:
+                  raise SystemExit("refusing to add fields other than version_state")
+          PY
+          if [[ -f .drift-pr-skip ]]; then
+            echo "version_state is already outdated; not opening another pull request"
+            exit 0
+          fi
+          existing_pr="$(gh pr list --state open --limit 50 --json number,title --jq '.[] | select(.title=="chore: set research version_state to outdated") | .number' | head -n 1)"
+          if [[ -n "${existing_pr}" ]]; then
+            echo "open draft-capable pull request #${existing_pr}; not opening another"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add -- research/STATUS.json
+          python3 - <<'PY'
+          import subprocess
+          import sys
+
+          names = subprocess.check_output(["git", "diff", "--cached", "--name-only"], text=True).splitlines()
+          if names != ["research/STATUS.json"]:
+              sys.exit("refusing to commit paths other than research/STATUS.json: " + ", ".join(names))
+          PY
+          git commit -m "chore: set research version_state to outdated"
+          git push origin "HEAD:refs/heads/${branch}"
+          pr_body="$RUNNER_TEMP/drift-pr.md"
+          {
+            echo "Sets \`version_state: outdated\` in \`research/STATUS.json\`."
+            echo
+            echo "This pull request does not edit workflows, the validator, AGENTS.md, or test and coverage config."
+            echo "It does not push to the default branch. Automation will not merge. A human merges."
+            echo
+            echo "Pin mismatches:"
+            echo
+            echo '```'
+            cat "$RUNNER_TEMP/drift.txt"
+            echo '```'
+          } > "$pr_body"
+          gh pr create --draft --base "$default_branch" --head "$branch" --title "chore: set research version_state to outdated" --body-file "$pr_body"
+          if [[ -f "$RUNNER_TEMP/drift-command-error.txt" ]]; then
+            echo "a research entry point failed after drift was reported" >&2
+            exit 1
+          fi

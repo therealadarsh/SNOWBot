@@ -13,6 +13,9 @@ runner = CliRunner()
 
 def test_lesson_lifecycle(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
+    evidence = tmp_path / "docs"
+    evidence.mkdir()
+    (evidence / "x.md").write_text("evidence\n", encoding="utf-8")
     add = runner.invoke(
         app,
         [
