@@ -650,7 +650,7 @@ jobs:
           done
 
       - name: Download manifest
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: ${{ needs.plan.outputs.artifact }}
           path: manifest-dist
@@ -796,7 +796,7 @@ jobs:
           done
 
       - name: Download shard outputs
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           pattern: research-shard-*-logs-${{ github.run_id }}-${{ github.run_attempt }}
           path: collected
@@ -881,7 +881,7 @@ jobs:
       - name: Download breach sentinels
         id: download
         continue-on-error: true
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           pattern: research-budget-breach-*
           path: breach-sentinel
