@@ -113,13 +113,23 @@ def parse_junit(path: Path, root: Path | None = None) -> dict[str, str]:
     ``root`` (the worktree) lets file names be resolved against real files; without it a
     ``test_*`` module name is assumed.
     """
-    if not path.is_file():
+    try:
+        tree = ET.parse(path)
+    except FileNotFoundError:
         return {}
     outcomes: dict[str, str] = {}
-    for case in ET.parse(path).getroot().iter("testcase"):
+    for case in tree.getroot().iter("testcase"):
         file, rest = _file_and_rest(case.get("classname", ""), case.get("name", ""), root)
         outcomes[f"{file}::{rest}"] = _outcome(case)
     return outcomes
+
+
+def _safe_parse(path: Path, root: Path) -> dict[str, str] | None:
+    """``parse_junit`` that returns None for a truncated, empty or unreadable file."""
+    try:
+        return parse_junit(path, root)
+    except (ET.ParseError, OSError):
+        return None
 
 
 def red_check(
@@ -130,6 +140,11 @@ def red_check(
     Returns ``(ok, outcomes, reason)``. ``ok`` only when every file collected at least one
     test and every outcome is ``failed`` or ``error``.
     """
+    if not test_files:
+        return False, {}, "no test files"
+    absolute = [f for f in test_files if Path(f).is_absolute()]
+    if absolute:
+        return False, {}, "absolute test file path not allowed: " + ", ".join(absolute)
     files = [Path(f).as_posix().removeprefix("./") for f in test_files]
     report = wt / OUT_DIR / "red.xml"
     try:
@@ -153,7 +168,10 @@ def red_check(
         )
         if not report.is_file():
             return False, {}, f"pytest produced no junit report: {_tail(proc)}"
-        outcomes = parse_junit(report, wt)
+        parsed = _safe_parse(report, wt)
+        if parsed is None:
+            return False, {}, f"unparseable junit report: {_tail(proc)}"
+        outcomes = parsed
     finally:
         _restore_memory(wt)
 
@@ -198,10 +216,11 @@ def run_gates(wt: Path, *, base_ref: str, runner: Runner = subprocess.run) -> Ga
     results: list[GateResult] = []
     try:
         (wt / OUT_DIR).mkdir(exist_ok=True)
+        (wt / OUT_DIR / "junit.xml").unlink(missing_ok=True)
         for name, cmd in gates:
             proc = _exec(runner, wt, cmd)
             results.append(GateResult(name, proc.returncode == 0, _tail(proc)))
-        outcomes = parse_junit(wt / OUT_DIR / "junit.xml", wt)
+        outcomes = _safe_parse(wt / OUT_DIR / "junit.xml", wt) or {}
     finally:
         _restore_memory(wt)
     return GateReport(results=tuple(results), test_outcomes=outcomes)

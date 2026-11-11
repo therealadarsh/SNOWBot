@@ -292,3 +292,77 @@ def test_memory_restored_when_runner_raises(tmp_path: Path) -> None:
     with pytest.raises(RuntimeError, match="exploded"):
         red_check(wt, ["tests/test_a.py"], runner=boom)
     assert _git(wt, "status", "--porcelain", "--", ".snowbot/memory") == ""
+
+
+@pytest.mark.parametrize(
+    "content", ["", '<?xml version="1.0"?><testsuites><testsuite><testcase cl']
+)
+def test_red_check_unparseable_junit(tmp_path: Path, content: str) -> None:
+    def run(cmd: list[str], **kw: Any) -> subprocess.CompletedProcess[str]:
+        out = Path(kw["cwd"]) / ".snowbot-out"
+        out.mkdir(exist_ok=True)
+        (out / "red.xml").write_text(content)
+        return _cp(1, out="pytest tail text")
+
+    ok, outcomes, reason = red_check(tmp_path, ["tests/test_a.py"], runner=run)
+    assert ok is False and outcomes == {}
+    assert "unparseable junit" in reason and "pytest tail text" in reason
+
+
+@pytest.mark.parametrize(
+    "content", ["", '<?xml version="1.0"?><testsuites><testsuite><testcase cl']
+)
+def test_run_gates_unparseable_junit(tmp_path: Path, content: str) -> None:
+    def run(cmd: list[str], **kw: Any) -> subprocess.CompletedProcess[str]:
+        if cmd[2] == "pytest":
+            (Path(kw["cwd"]) / ".snowbot-out" / "junit.xml").write_text(content)
+        return _cp(0)
+
+    report = run_gates(tmp_path, base_ref="uat", runner=run)
+    assert report.test_outcomes == {}
+    assert report.results[3].name == "pytest" and report.results[3].passed is True
+
+
+def test_run_gates_ignores_stale_junit(tmp_path: Path) -> None:
+    out = tmp_path / ".snowbot-out"
+    out.mkdir()
+    shutil.copy(FIX / "junit_mixed.xml", out / "junit.xml")
+
+    def run(cmd: list[str], **kw: Any) -> subprocess.CompletedProcess[str]:
+        return _cp(0)
+
+    assert run_gates(tmp_path, base_ref="uat", runner=run).test_outcomes == {}
+
+
+def test_red_check_dot_slash_path_equals_plain(tmp_path: Path) -> None:
+    ok, outcomes, _ = red_check(
+        tmp_path, ["./tests/test_b.py"], runner=_junit_runner("junit_import_error.xml")
+    )
+    assert ok is True and outcomes == {"tests/test_b.py::<collection>": "error"}
+
+
+def test_red_check_rejects_absolute_path(tmp_path: Path) -> None:
+    called: list[int] = []
+
+    def run(cmd: list[str], **kw: Any) -> subprocess.CompletedProcess[str]:
+        called.append(1)
+        return _cp(1)
+
+    abs_path = str(tmp_path / "tests" / "test_b.py")
+    ok, outcomes, reason = red_check(tmp_path, [abs_path], runner=run)
+    assert ok is False and outcomes == {} and "absolute" in reason
+    assert called == []
+
+
+def test_red_check_prefix_name_does_not_match(tmp_path: Path) -> None:
+    ok, _, reason = red_check(
+        tmp_path, ["tests/test_a.py"], runner=_junit_runner("junit_prefix.xml")
+    )
+    assert not ok and "collected no tests" in reason and "tests/test_a.py" in reason
+
+
+def test_red_check_no_files_does_not_run(tmp_path: Path) -> None:
+    def run(cmd: list[str], **kw: Any) -> subprocess.CompletedProcess[str]:
+        raise AssertionError("runner must not be called")
+
+    assert red_check(tmp_path, [], runner=run) == (False, {}, "no test files")
