@@ -18,3 +18,5 @@ venv/
 *.log
 .idea/
 .vscode/
+.snowbot-out/
+.snowbot/runs/
