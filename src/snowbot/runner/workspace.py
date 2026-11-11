@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 
 from snowbot.errors import SnowbotError
+from snowbot.runner.policy import is_agent_config
 
 OUT_DIR = ".snowbot-out"
 
@@ -18,7 +20,14 @@ class WorkspaceError(SnowbotError):
 
 
 def _git(cwd: Path, *args: str) -> str:
-    result = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, check=False)
+    result = subprocess.run(
+        ["git", *args],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        check=False,
+        env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+    )
     if result.returncode != 0:
         detail = result.stderr.strip() or result.stdout.strip()
         raise WorkspaceError(f"git {' '.join(args)} failed: {detail}")
@@ -49,6 +58,10 @@ def changed_files(wt: Path, base: str) -> list[tuple[str, str]]:
     untracked = _git(wt, "ls-files", "--others", "--exclude-standard", "-z")
     for path in untracked.split("\0"):
         if path:
+            found.setdefault(path, "A")
+    ignored = _git(wt, "ls-files", "--others", "--ignored", "--exclude-standard", "-z")
+    for path in ignored.split("\0"):
+        if path and is_agent_config(path):
             found.setdefault(path, "A")
     return sorted(((s, p) for p, s in found.items() if not _in_out_dir(p)), key=lambda c: c[1])
 

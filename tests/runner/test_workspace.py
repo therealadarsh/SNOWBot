@@ -79,3 +79,15 @@ def test_push_failure_carries_stderr(tmp_path: Path) -> None:
     with pytest.raises(SnowbotError) as exc:
         push(repo, "main")
     assert "missing.git" in str(exc.value)
+
+
+def test_changed_files_reports_ignored_agent_config(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    base = commit_files(
+        repo, {".gitignore": ".claude/settings.local.json\n*.pyc\n.coverage\n"}, "ignore"
+    )
+    (repo / ".claude").mkdir()
+    (repo / ".claude" / "settings.local.json").write_text("{}")
+    (repo / "x.pyc").write_text("c")
+    (repo / ".coverage").write_text("c")
+    assert changed_files(repo, base) == [("A", ".claude/settings.local.json")]
