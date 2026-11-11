@@ -21,6 +21,7 @@ class BackendKind(StrEnum):
     """Supported agent backends (adapters implemented in later phases)."""
 
     CURSOR = "cursor"
+    CLAUDE_CODE = "claude_code"
 
 
 class BackendConfig(BaseModel):
@@ -65,6 +66,27 @@ class PipelineConfig(BaseModel):
         return Path(value) if not isinstance(value, Path) else value
 
 
+class RunnerConfig(BaseModel):
+    """Issue runner settings (``runner:`` block of ``snowbot.yaml``)."""
+
+    repo: str | None = None
+    sandbox: Literal["host"] | None = None
+    poll_interval_s: int = Field(default=300, gt=0)
+    max_runs_per_day: int = Field(default=5, gt=0)
+    max_turns: int = Field(default=40, gt=0)
+    max_budget_usd: float = Field(default=3.0, gt=0)
+    timeout_s: int = Field(default=1800, gt=0)
+    fix_rounds: int = Field(default=2, gt=0)
+    model: str | None = None
+    base_branch: str = "main"
+
+    def require_host_sandbox(self) -> None:
+        """Raise unless the owner explicitly set ``sandbox: host``."""
+        if self.sandbox != "host":
+            msg = "The runner executes agents on the host; set runner.sandbox: host explicitly"
+            raise ConfigError(msg, code="sandbox_not_host")
+
+
 class SnowbotConfig(BaseModel):
     """Root configuration document persisted as ``snowbot.yaml``."""
 
@@ -73,6 +95,7 @@ class SnowbotConfig(BaseModel):
     backend: BackendConfig = Field(default_factory=BackendConfig)
     project: ProjectConfig = Field(default_factory=ProjectConfig)
     pipeline: PipelineConfig = Field(default_factory=PipelineConfig)
+    runner: RunnerConfig = Field(default_factory=RunnerConfig)
 
     def effective_backend_kind(self) -> BackendKind:
         """Return backend kind, honoring ``SNOWBOT_BACKEND`` when set."""
