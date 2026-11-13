@@ -1,0 +1,98 @@
+name: deploy-uat
+
+on:
+  push:
+    branches: [uat]
+
+permissions: {}
+
+# One deploy at a time; a newer push waits rather than cancelling a deploy mid-flight.
+concurrency:
+  group: uat-deploy
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: plan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      deploy: ${{ steps.plan.outputs.deploy }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Decide whether to deploy
+        id: plan
+        env:
+          ROLE_ARN: ${{ vars.AWS_UAT_ROLE_ARN }}
+        run: |
+          reason=""
+          if [[ -z "$ROLE_ARN" ]]; then reason="repository variable AWS_UAT_ROLE_ARN is not set"
+          elif [[ ! -f infra/cdk.json ]]; then reason="infra/cdk.json does not exist yet"
+          elif [[ ! -d examples/sample-app ]]; then reason="examples/sample-app does not exist yet"
+          fi
+          if [[ -n "$reason" ]]; then
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+            echo "UAT deploy skipped: $reason" | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  # The `uat` environment makes GitHub record a deployment for this SHA through the
+  # Deployments API; the orchestrator reads it to tie acceptance to what was live.
+  deploy:
+    name: deploy-uat
+    needs: plan
+    if: needs.plan.outputs.deploy == 'true'
+    runs-on: ubuntu-latest
+    environment: uat
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+
+      # Installs happen before any AWS credentials exist in the job.
+      - name: Install CDK (hash-pinned Python deps, no npm scripts)
+        run: |
+          python -m pip install --upgrade pip
+          pip install --require-hashes -r infra/requirements.txt
+          npm ci --prefix infra --ignore-scripts --no-audit --no-fund
+          echo "$GITHUB_WORKSPACE/infra/node_modules/.bin" >> "$GITHUB_PATH"
+
+      - name: AWS credentials through GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_UAT_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_UAT_REGION || 'us-east-1' }}
+          role-session-name: snowbot-uat-${{ github.run_id }}
+
+      - name: cdk deploy
+        working-directory: infra
+        run: cdk deploy --all --require-approval never --outputs-file "$RUNNER_TEMP/cdk-outputs.json"
+
+      - name: Smoke test
+        run: |
+          if [[ -f infra/smoke_test.py ]]; then
+            python infra/smoke_test.py "$RUNNER_TEMP/cdk-outputs.json"
+          else
+            echo "infra/smoke_test.py does not exist yet; no smoke test"
+          fi
+
+      - name: Record deployed SHA
+        env:
+          SHA: ${{ github.sha }}
+        run: echo "Deployed \`$SHA\` to UAT" >> "$GITHUB_STEP_SUMMARY"

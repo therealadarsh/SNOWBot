@@ -7,18 +7,40 @@ import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
+# Mirrors the governance list in AGENTS.md. Entries ending in "/" match a whole tree.
 GOVERNANCE_PATH_PREFIXES: tuple[str, ...] = (
     "AGENTS.md",
+    "CLAUDE.md",
     "CONTRIBUTING.md",
-    ".github/workflows/",
+    ".github/",
+    ".pre-commit-config.yaml",
+    "pyproject.toml",
+    "setup.cfg",
+    "pytest.ini",
+    "tox.ini",
+    ".coveragerc",
+    "tests/conftest.py",
+    "scripts/",
     "src/snowbot/validator/",
     "src/snowbot/templates/",
+    ".snowbot/memory/",
+    ".claude/",
+    ".cursor/",
+    ".codex/",
+    ".mcp.json",
     "docs/ARCHITECT_GATE.md",
     "docs/GITHUB_SETUP.md",
     "docs/INDEPENDENT_VALIDATION.md",
     "docs/BRANCH_PROTECTION.md",
-    "scripts/independent_validate.sh",
-    ".pre-commit-config.yaml",
+)
+
+# Lockfiles and requirements files are governance wherever they live (e.g. infra/).
+GOVERNANCE_BASENAME_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"requirements[^/]*\.txt"),
+    re.compile(r"constraints[^/]*\.txt"),
+    re.compile(r".*\.lock"),
+    re.compile(r"package-lock\.json"),
+    re.compile(r"pnpm-lock\.yaml"),
 )
 
 GOVERNANCE_PYPROJECT_KEYS: tuple[str, ...] = (
@@ -262,7 +284,7 @@ def _check_hardcoded_test_detection(diff: str, result: AntiGamingResult) -> None
 
 def _check_governance_mixed_with_product(diff: str, result: AntiGamingResult) -> None:
     touched = _touched_paths(diff)
-    gov = {p for p in touched if _is_governance_path(p)}
+    gov = {p for p in touched if is_governance_path(p)}
     product = {p for p in touched if _is_product_path(p)}
     if gov and product:
         result.findings.append(
@@ -284,13 +306,18 @@ def _touched_paths(diff: str) -> set[str]:
     return paths
 
 
-def _is_governance_path(path: str) -> bool:
-    if path == "pyproject.toml":
-        return True
-    return any(path.startswith(prefix) or path == prefix for prefix in GOVERNANCE_PATH_PREFIXES)
+def is_governance_path(path: str) -> bool:
+    """True when *path* (repo-relative, POSIX) may change only on a governance branch."""
+    for prefix in GOVERNANCE_PATH_PREFIXES:
+        if path == prefix or (prefix.endswith("/") and path.startswith(prefix)):
+            return True
+    basename = path.rsplit("/", 1)[-1]
+    return any(pattern.fullmatch(basename) for pattern in GOVERNANCE_BASENAME_PATTERNS)
 
 
 def _is_product_path(path: str) -> bool:
+    if is_governance_path(path):
+        return False
     if path.startswith("tests/") and path.endswith(".py"):
         return True
-    return bool(path.startswith("src/snowbot/") and not path.startswith("src/snowbot/validator/"))
+    return path.startswith("src/snowbot/")

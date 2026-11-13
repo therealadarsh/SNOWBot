@@ -19,13 +19,13 @@ Load and apply:
 
 ## Automation
 
-CI job **`architect-gate`** (workflow `.github/workflows/architect-gate.yml`) runs:
+CI job **`architect-gate`** (workflow `.github/workflows/architect-gate.yml`) installs the validator and checklist from the PR's base commit and runs them against the PR head:
 
-- `ruff`, `mypy`, `pytest --cov-fail-under=85`
-- `./scripts/independent_validate.sh` when present on `main`, else equivalent commands
-- `snowbot validate --phase {{ phase_id | default("1b") }}` with merge-base diff anti-gaming
+- the phase checklist for `{{ phase_id | default("1b") }}` (phase from the `feat/<phase>-<slug>` branch name or a `phase:` label)
+- the anti-gaming diff against the PR's real base, judged by finding codes
+- `snowbot status --check`
 
-Emergency bypass: label PR `skip-architect` (owners only; document in PR why).
+CI runs `ruff`, `mypy` and `pytest --cov-fail-under=85` separately, and `test-inventory` fails if any base test id disappears. There is no bypass label.
 
 ## Output format
 

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from snowbot.validator.antigaming import analyze_diff, collect_git_diff
+from snowbot.validator.antigaming import analyze_diff, collect_git_diff, is_governance_path
 from snowbot.validator.checks import CheckSpec, run_check
 from snowbot.validator.context import CheckContext
 
@@ -98,3 +98,76 @@ def test_real_git_deletion_of_non_test_file_is_not_flagged(tmp_path: Path) -> No
     diff = collect_git_diff(tmp_path, "HEAD~1")
     result = analyze_diff(diff)
     assert all(f.code != "test_file_deleted" for f in result.findings)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "AGENTS.md",
+        "CLAUDE.md",
+        "CONTRIBUTING.md",
+        ".github/CODEOWNERS",
+        ".github/workflows/ci.yml",
+        ".pre-commit-config.yaml",
+        "pyproject.toml",
+        "setup.cfg",
+        ".coveragerc",
+        "tests/conftest.py",
+        "scripts/independent_validate.sh",
+        "src/snowbot/validator/checklist.yaml",
+        "src/snowbot/templates/roles/approver.md.j2",
+        ".snowbot/memory/lessons/INDEX.yaml",
+        ".claude/settings.json",
+        ".cursor/rules/x.mdc",
+        ".codex/config.toml",
+        ".mcp.json",
+        "docs/INDEPENDENT_VALIDATION.md",
+        "requirements.txt",
+        "infra/requirements.txt",
+        "infra/requirements-dev.txt",
+        "uv.lock",
+        "examples/sample-app/poetry.lock",
+        "infra/package-lock.json",
+    ],
+)
+def test_governance_paths_match_agents_md(path: str) -> None:
+    assert is_governance_path(path)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "src/snowbot/impact/git.py",
+        "src/snowbot/prompts/templates/engineer.md.j2",
+        "tests/impact/conftest.py",
+        "tests/validator/test_antigaming.py",
+        "docs/OWNER_SETUP.md",
+        "README.md",
+        "STATUS.md",
+        "infra/app.py",
+        "AGENTS.md.bak",
+        ".githubx/notes.md",
+    ],
+)
+def test_non_governance_paths(path: str) -> None:
+    assert not is_governance_path(path)
+
+
+def test_template_edit_alone_is_not_mixed_with_product(tmp_path: Path) -> None:
+    _commit_change(
+        tmp_path,
+        {"src/snowbot/templates/roles/approver.md.j2": "a\n"},
+        {"src/snowbot/templates/roles/approver.md.j2": "b\n"},
+    )
+    result = analyze_diff(collect_git_diff(tmp_path, "HEAD~1"))
+    assert result.passed
+
+
+def test_nested_requirements_with_product_code_is_mixed(tmp_path: Path) -> None:
+    _commit_change(
+        tmp_path,
+        {"infra/requirements.txt": "constructs\n", "src/snowbot/mod.py": "X = 1\n"},
+        {"infra/requirements.txt": "constructs\nevil\n", "src/snowbot/mod.py": "X = 2\n"},
+    )
+    result = analyze_diff(collect_git_diff(tmp_path, "HEAD~1"))
+    assert [f.code for f in result.findings] == ["governance_mixed_with_product"]
