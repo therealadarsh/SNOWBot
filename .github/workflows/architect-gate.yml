@@ -43,7 +43,8 @@ jobs:
       - name: Install the base validator
         run: |
           python -m venv "$RUNNER_TEMP/validator-venv"
-          "$RUNNER_TEMP/validator-venv/bin/pip" install -q ./validator
+          # Editable install: `main` still has hatch force-include dupes on non-editable wheels until this PR merges.
+          "$RUNNER_TEMP/validator-venv/bin/pip" install -q -e ./validator
 
       - name: Resolve phase
         id: phase
