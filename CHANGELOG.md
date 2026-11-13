@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Lesson index lists each lesson once. Proposed and retired lessons share one directory; scanning it twice had duplicated every entry in `INDEX.yaml`.
 - `snowbot lesson accept` (and `promote`) refuses a lesson when an evidence ref is not an existing project file, a pull request present in git history or on GitHub, or the id of a recorded stop event. Lessons are found by id even when the YAML filename differs.
 - `snowbot playbook` omits accepted lessons that recommend an action forbidden by AGENTS.md safety rules.
+- Anti-gaming scanner now detects real `git diff` test-file deletions (`+++ /dev/null`; the old `b/dev/null` pattern never matched git output) and flags tautological test assertions (`assert True`/`assert 1`), `unittest.skip`/`pytest.skip`/`pytest.importorskip`, and added `# pragma: no cover`. Fixtures are regenerated from real git output (`tests/validator/fixtures/regen_diffs.sh`).
 
 ### Added
 
