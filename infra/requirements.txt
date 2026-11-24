@@ -1,7 +1,7 @@
 # AWS CDK app dependencies (phase 7 and 9). Install with:
 #   pip install --require-hashes -r infra/requirements.txt
 # Regenerate with pip-tools: pip-compile --generate-hashes --strip-extras --allow-unsafe
-# from the top-level pins aws-cdk-lib==2.275.0 and constructs==10.8.1.
+# from the top-level pins aws-cdk-lib==2.278.0 and constructs==10.8.1.
 attrs==26.1.0 \
     --hash=sha256:c647aa4a12dfbad9333ca4e71fe62ddc36f4e63b2d260a37a8b83d2f043ac309 \
     --hash=sha256:d03ceb89cb322a8fd706d4fb91940737b6642aa36998fe130a9bc96c985eff32
@@ -20,7 +20,7 @@ aws-cdk-cloud-assembly-schema==55.4.0 \
     --hash=sha256:6171413a327abba6f2a25aef2700dfe174e519458b0757e4babacc7abd69de64 \
     --hash=sha256:f58506906fbea5689a98687359905977c23f746ec465351f522b8c2bf36a2ba8
     # via aws-cdk-lib
-aws-cdk-lib==2.275.0 \
+aws-cdk-lib==2.278.0 \
     --hash=sha256:0902d7368e4600588cad9eab9124ade10d7d9d463ccf86ae18272e4369b1936b \
     --hash=sha256:223e5b8c67bee9802d714493b380251a2e8ce55c8c477e5d44ca2c85f3b322ee
     # via aws-cdk-lib / constructs pins above
