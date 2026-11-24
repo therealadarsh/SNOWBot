@@ -34,9 +34,9 @@ constructs==10.8.1 \
     # via
     #   aws-cdk-lib / constructs pins above
     #   aws-cdk-lib
-jsii==1.142.0 \
-    --hash=sha256:16d6b3e25bbaa081dd39eabe910b07f646fe4988302d8aae401690f247baf7df \
-    --hash=sha256:2fe1c5f2a5a405a5fbaaafb8b362cdf6a30171589e508c01682f33c5d529172f
+jsii==1.143.0 \
+    --hash=sha256:63ecd5bbec13e7ac4edd962b6ec834dc70def79c186a973f7c60edd57b7c3849 \
+    --hash=sha256:9d006ebf44ef171595a339bb691e86b4008a45ed454b65b2826a8122d2087278
     # via
     #   aws-cdk-asset-awscli-v1
     #   aws-cdk-asset-node-proxy-agent-v6
