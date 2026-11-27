@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="1" tests="2" time="0.027"><testcase classname="tests.test_c.TestK" name="test_m" time="0.000"><failure message="assert False">self = &lt;test_c.TestK object at 0x0&gt;
+
+&gt;   def test_m(self): assert False
+                      ^^^^^^^^^^^^
+E   assert False
+
+tests/test_c.py:3: AssertionError</failure></testcase><testcase classname="tests.test_c" name="test_only_skip" time="0.000"><skipped type="pytest.skip" message="no">/work/tests/test_c.py:4: no</skipped></testcase></testsuite></testsuites>
