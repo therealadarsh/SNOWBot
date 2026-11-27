@@ -7,7 +7,7 @@ import subprocess
 from pathlib import Path
 
 from snowbot.errors import SnowbotError
-from snowbot.runner.policy import is_agent_config
+from snowbot.runner.policy import is_agent_config, is_package_metadata, is_tool_config
 
 OUT_DIR = ".snowbot-out"
 
@@ -49,6 +49,29 @@ def _in_out_dir(path: str) -> bool:
     return path == OUT_DIR or path.startswith(OUT_DIR + "/")
 
 
+_COMPILED = (".pyc", ".pyo", ".pyd", ".so")
+
+
+def _ignored_but_relevant(path: str) -> bool:
+    """Gitignored files that still change what the gates run, so the policy must see them.
+
+    Agent config anywhere; tool config at the root; and, under ``src/`` (on ``PYTHONPATH``) or
+    ``tests/`` (put on ``sys.path`` by pytest), tool config, package metadata (entry points
+    load pytest plugins) and compiled modules outside ``__pycache__`` (imported sourceless).
+    """
+    if is_agent_config(path):
+        return True
+    low = path.lower()
+    parts = low.split("/")
+    if len(parts) == 1:
+        return is_tool_config(path)
+    if parts[0] not in ("src", "tests"):
+        return False
+    if is_tool_config(path) or is_package_metadata(path):
+        return True
+    return low.endswith(_COMPILED) and "__pycache__" not in parts
+
+
 def changed_files(wt: Path, base: str) -> list[tuple[str, str]]:
     """(status, path) for the working tree versus base, untracked files as A."""
     found: dict[str, str] = {}
@@ -61,7 +84,7 @@ def changed_files(wt: Path, base: str) -> list[tuple[str, str]]:
             found.setdefault(path, "A")
     ignored = _git(wt, "ls-files", "--others", "--ignored", "--exclude-standard", "-z")
     for path in ignored.split("\0"):
-        if path and is_agent_config(path):
+        if path and _ignored_but_relevant(path):
             found.setdefault(path, "A")
     return sorted(((s, p) for p, s in found.items() if not _in_out_dir(p)), key=lambda c: c[1])
 

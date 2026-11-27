@@ -91,3 +91,29 @@ def test_changed_files_reports_ignored_agent_config(tmp_path: Path) -> None:
     (repo / "x.pyc").write_text("c")
     (repo / ".coverage").write_text("c")
     assert changed_files(repo, base) == [("A", ".claude/settings.local.json")]
+
+
+def test_changed_files_reports_ignored_files_that_can_change_imports(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    ignore = "*.py[cod]\n__pycache__/\n*.egg-info/\npytest.ini\n.venv/\n"
+    base = commit_files(repo, {".gitignore": ignore}, "ignore")
+    planted = {
+        # Sourceless modules on PYTHONPATH=src or a pytest-inserted tests/ directory.
+        "src/sitecustomize.pyc": "c",
+        "src/mypy/__init__.pyc": "c",
+        "tests/snowbot.pyc": "c",
+        # Package metadata on sys.path registers pytest plugins via entry points.
+        "src/evil.egg-info/entry_points.txt": "[pytest11]\nevil = snowbot.evil\n",
+        # Tool config the gates read from the worktree root.
+        "pytest.ini": "[pytest]\n",
+    }
+    harmless = {
+        "src/snowbot/__pycache__/cli.cpython-312.pyc": "c",
+        "x.pyc": "c",
+        ".venv/lib/site-packages/a.pth": "c",
+        ".venv/lib/site-packages/a.dist-info/METADATA": "c",
+    }
+    for name, content in {**planted, **harmless}.items():
+        (repo / name).parent.mkdir(parents=True, exist_ok=True)
+        (repo / name).write_text(content)
+    assert changed_files(repo, base) == sorted((("A", p) for p in planted), key=lambda c: c[1])

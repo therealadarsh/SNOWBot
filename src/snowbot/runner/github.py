@@ -38,8 +38,21 @@ class Issue:
     labels: frozenset[str]
 
 
+@dataclass(frozen=True)
+class LabelEvent:
+    """Who applied a label most recently, and when (ISO 8601, ``""`` when GitHub omitted it).
+
+    An empty ``created_at`` is unknown, not old: callers comparing it against the issue's last
+    edit must treat it as not trusted.
+    """
+
+    login: str
+    created_at: str
+
+
 class GitHub(Protocol):
     def get_issue(self, n: int) -> Issue: ...
+    def label_event(self, n: int, label: str) -> LabelEvent | None: ...
     def label_actor(self, n: int, label: str) -> str | None: ...
     def permission(self, login: str) -> str: ...
     def add_label(self, n: int, label: str) -> None: ...
@@ -83,9 +96,10 @@ class GhCli:
             labels=frozenset(str(label["name"]) for label in data.get("labels", [])),
         )
 
-    def label_actor(self, n: int, label: str) -> str | None:
+    def label_event(self, n: int, label: str) -> LabelEvent | None:
+        """The most recent ``labeled`` timeline event for ``label``; None without an actor."""
         out = self._ok("api", f"repos/{self.repo}/issues/{n}/timeline", "--paginate", "--jq", ".[]")
-        actor: str | None = None
+        latest: LabelEvent | None = None
         for line in out.splitlines():
             if not line.strip():
                 continue
@@ -95,8 +109,13 @@ class GhCli:
             if (event.get("label") or {}).get("name") != label:
                 continue
             login = (event.get("actor") or {}).get("login")
-            actor = str(login) if login else None
-        return actor
+            created = event.get("created_at")
+            latest = LabelEvent(str(login), str(created or "")) if login else None
+        return latest
+
+    def label_actor(self, n: int, label: str) -> str | None:
+        event = self.label_event(n, label)
+        return event.login if event else None
 
     def permission(self, login: str) -> str:
         proc = self._gh(
@@ -142,9 +161,10 @@ class GhCli:
     def pr_for_branch(self, branch: str) -> int | None:
         out = self._ok(
             "pr", "list", "--repo", self.repo, "--head", branch, "--state", "open",
-            "--json", "number",
+            "--json", "number,isCrossRepository",
         )  # fmt: skip
-        rows = json.loads(out)
+        # A fork can open a PR from a branch with the same name; only same-repo PRs count.
+        rows = [r for r in json.loads(out) if r.get("isCrossRepository") is False]
         return int(rows[0]["number"]) if rows else None
 
     def pr_head_sha(self, n: int) -> str:
@@ -170,6 +190,9 @@ class DryRunGitHub:
 
     def get_issue(self, n: int) -> Issue:
         return self._inner.get_issue(n)
+
+    def label_event(self, n: int, label: str) -> LabelEvent | None:
+        return self._inner.label_event(n, label)
 
     def label_actor(self, n: int, label: str) -> str | None:
         return self._inner.label_actor(n, label)

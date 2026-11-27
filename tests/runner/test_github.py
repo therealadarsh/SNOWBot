@@ -13,6 +13,7 @@ from snowbot.runner.github import (
     GhCli,
     GitHubError,
     Issue,
+    LabelEvent,
     is_trusted_label,
 )
 
@@ -150,7 +151,8 @@ def test_get_issue_parses_labels() -> None:
 
 
 def test_pr_for_branch_and_head_sha() -> None:
-    gh, fake = make({"pr list": (0, json.dumps([{"number": 11}])), "pr view": (0, "abc123\n")})
+    rows = [{"number": 11, "isCrossRepository": False}]
+    gh, fake = make({"pr list": (0, json.dumps(rows)), "pr view": (0, "abc123\n")})
     assert gh.pr_for_branch("feat/x") == 11
     assert gh.pr_head_sha(11) == "abc123"
     empty, _ = make({"pr list": (0, "[]")})
@@ -168,3 +170,58 @@ def test_label_comment_calls_and_failure_raises() -> None:
     with pytest.raises(GitHubError) as exc:
         bad.comment(5, "x")
     assert exc.value.details is not None and exc.value.details["stderr"] == "boom"
+
+
+def test_pr_for_branch_ignores_fork_prs() -> None:
+    rows = [
+        {"number": 3, "isCrossRepository": True},
+        {"number": 4},  # field missing: not known to be same-repo, so dropped
+        {"number": 8, "isCrossRepository": False},
+    ]
+    gh, fake = make({"pr list": (0, json.dumps(rows))})
+    assert gh.pr_for_branch("snowbot/issue-5") == 8
+    argv = fake.calls[0]
+    assert argv[argv.index("--json") + 1] == "number,isCrossRepository"
+    only_forks, _ = make({"pr list": (0, json.dumps([{"number": 3, "isCrossRepository": True}]))})
+    assert only_forks.pr_for_branch("snowbot/issue-5") is None
+
+
+def _labeled_at(actor: str | None, label: str, at: str | None) -> str:
+    event: dict[str, Any] = {"event": "labeled", "label": {"name": label}}
+    if actor is not None:
+        event["actor"] = {"login": actor}
+    if at is not None:
+        event["created_at"] = at
+    return json.dumps(event)
+
+
+def test_label_event_has_login_and_time_of_latest_application() -> None:
+    lines = "\n".join(
+        [
+            _labeled_at("old", "snowbot:ready", "2026-11-01T00:00:00Z"),
+            _labeled_at("other", "x", "2026-11-03T00:00:00Z"),
+            _labeled_at("newest", "snowbot:ready", "2026-11-02T10:00:00Z"),
+        ]
+    )
+    gh, _ = make({"timeline": (0, lines)})
+    assert gh.label_event(5, "snowbot:ready") == LabelEvent(
+        login="newest", created_at="2026-11-02T10:00:00Z"
+    )
+    assert gh.label_actor(5, "snowbot:ready") == "newest"
+    assert gh.label_event(5, "missing") is None
+
+
+def test_label_event_without_actor_or_time() -> None:
+    gh, _ = make({"timeline": (0, _labeled_at(None, "snowbot:ready", "2026-11-02T10:00:00Z"))})
+    assert gh.label_event(5, "snowbot:ready") is None
+    assert gh.label_actor(5, "snowbot:ready") is None
+    gh, _ = make({"timeline": (0, _labeled_at("alice", "snowbot:ready", None))})
+    # Unknown time is an empty string; callers must not treat it as recent.
+    assert gh.label_event(5, "snowbot:ready") == LabelEvent(login="alice", created_at="")
+
+
+def test_dry_run_label_event_passes_through() -> None:
+    gh, fake = make({"timeline": (0, _labeled_at("a", "l", "2026-11-02T10:00:00Z"))})
+    dry = DryRunGitHub(gh)
+    assert dry.label_event(5, "l") == LabelEvent("a", "2026-11-02T10:00:00Z")
+    assert len(fake.calls) == 1
