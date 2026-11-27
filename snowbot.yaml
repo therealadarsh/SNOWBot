@@ -12,3 +12,16 @@ pipeline:
   setup_branch: chore/snowbot-setup
   spec_path: docs/pipeline-spec.yaml
   backlog_path: docs/backlog.yaml
+# Issue runner (optional). Uncomment to configure.
+# runner:
+#   repo: owner/name
+#   # The owner must set this explicitly: agents then run on the host, not in a container.
+#   # sandbox: host
+#   poll_interval_s: 300
+#   max_runs_per_day: 5
+#   max_turns: 40
+#   max_budget_usd: 3.0
+#   timeout_s: 1800
+#   fix_rounds: 2
+#   # model: <model id>
+#   base_branch: main
