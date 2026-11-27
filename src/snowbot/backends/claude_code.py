@@ -10,11 +10,13 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-from collections.abc import Callable, Sequence
+import time
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from snowbot.backends.proc import TIMEOUT_RETURNCODE, run_killing_group
 from snowbot.models.config import RunnerConfig
 
 # Path limits come from deny rules and the runner's diff check, not from these allow rules.
@@ -28,6 +30,19 @@ STAGE1_ALLOWED: tuple[str, ...] = (
     "Bash(mypy *)",
 )
 STAGE2_ALLOWED: tuple[str, ...] = STAGE1_ALLOWED
+# Agent instructions and tool config. First line of defense only: the runner's diff policy
+# rejects these paths whatever the agent manages to write.
+PROTECTED_PATHS: tuple[str, ...] = (
+    ".claude/**",
+    "**/CLAUDE.md",
+    "**/AGENTS.md",
+    ".mcp.json",
+    "**/conftest.py",
+    "**/pyproject.toml",
+    "**/pytest.ini",
+    "**/mypy.ini",
+    "**/ruff.toml",
+)
 ALWAYS_DENIED: tuple[str, ...] = (
     "Bash(git push *)",
     "Bash(git commit *)",
@@ -35,10 +50,27 @@ ALWAYS_DENIED: tuple[str, ...] = (
     "Bash(curl *)",
     "WebFetch",
     "WebSearch",
+    *(f"{tool}({pattern})" for pattern in PROTECTED_PATHS for tool in ("Edit", "Write")),
 )
 
 _SETTINGS = {"sandbox": {"enabled": True, "autoAllowBashIfSandboxed": False}}
-_STRIPPED_ENV = ("ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL", "CLAUDECODE")
+# Ruling R16: only these variables, and every LC_*, reach the agent. The spike signed in with
+# the subscription login under ``env -i HOME PATH USER TERM``; no token is needed or passed.
+ENV_ALLOWLIST = frozenset(
+    {
+        "HOME",
+        "PATH",
+        "USER",
+        "LOGNAME",
+        "TERM",
+        "LANG",
+        "TMPDIR",
+        "SHELL",
+        "CONDA_PREFIX",
+        "CONDA_DEFAULT_ENV",
+    }
+)
+_OK_SUBTYPES = (None, "success")
 _SNIPPET = 300
 
 
@@ -63,8 +95,23 @@ def build_argv(
     allowed_tools: Sequence[str],
     disallowed_tools: Sequence[str],
     resume_session: str | None = None,
+    max_turns: int | None = None,
+    max_budget_usd: float | None = None,
 ) -> list[str]:
-    """Build the ``claude -p`` command line (tool lists last: they are variadic)."""
+    """Build the ``claude -p`` command line (tool lists last: they are variadic).
+
+    ``max_turns`` and ``max_budget_usd`` override the config, for a caller passing what is
+    left of a stage's budget. A spent budget raises ``ValueError`` rather than sending a limit
+    the CLI could read as "none".
+    """
+    turns = cfg.max_turns if max_turns is None else max_turns
+    budget = cfg.max_budget_usd if max_budget_usd is None else max_budget_usd
+    if turns < 1:
+        msg = f"max_turns must be at least 1, got {turns}"
+        raise ValueError(msg)
+    if round(budget, 2) < 0.01:
+        msg = f"max_budget_usd must be at least 0.01, got {budget}"
+        raise ValueError(msg)
     argv = [
         "claude",
         "-p",
@@ -81,9 +128,9 @@ def build_argv(
         "--settings",
         json.dumps(_SETTINGS),
         "--max-turns",
-        str(cfg.max_turns),
+        str(turns),
         "--max-budget-usd",
-        f"{cfg.max_budget_usd:.2f}",
+        f"{budget:.2f}",
         "--append-system-prompt-file",
         str(system_prompt_file),
     ]
@@ -96,13 +143,12 @@ def build_argv(
     return argv
 
 
-def _child_env() -> dict[str, str]:
-    """Environment for the agent: the owner's login only, no API key or nested-session vars."""
-    return {
-        k: v
-        for k, v in os.environ.items()
-        if k not in _STRIPPED_ENV and not k.startswith("CLAUDE_CODE_")
-    }
+def _child_env(extra_env: Mapping[str, str] | None = None) -> dict[str, str]:
+    """Allowlisted environment for the agent, then ``extra_env``. No token gets through."""
+    env = {k: v for k, v in os.environ.items() if k in ENV_ALLOWLIST or k.startswith("LC_")}
+    if extra_env:
+        env.update(extra_env)
+    return env
 
 
 def _fail(error: str, exit_code: int, text: str = "") -> AgentResult:
@@ -118,9 +164,16 @@ def run_agent(
     *,
     cwd: Path,
     timeout_s: int,
-    runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
+    runner: Callable[..., subprocess.CompletedProcess[str]] = run_killing_group,
+    extra_env: Mapping[str, str] | None = None,
 ) -> AgentResult:
-    """Run the agent and map its JSON result to an :class:`AgentResult`."""
+    """Run the agent and map its JSON result to an :class:`AgentResult`.
+
+    The default runner starts the agent in its own process group and, on timeout, kills the
+    whole group, so tools the agent started do not outlive it. ``extra_env`` is merged over
+    the allowlisted environment (the runner passes ``PYTHONPATH=<wt>/src``).
+    """
+    start = time.monotonic()
     try:
         proc = runner(
             argv,
@@ -128,13 +181,17 @@ def run_agent(
             timeout=timeout_s,
             capture_output=True,
             text=True,
-            env=_child_env(),
+            env=_child_env(extra_env),
             check=False,
         )
     except subprocess.TimeoutExpired:
         return _fail(f"timeout after {timeout_s}s", -1)
     except FileNotFoundError as exc:
         return _fail(f"claude CLI not found: {exc}", -1)
+    except OSError as exc:
+        return _fail(f"could not start claude: {exc}", -1)
+    if proc.returncode == TIMEOUT_RETURNCODE and time.monotonic() - start >= timeout_s:
+        return _fail(f"timeout after {timeout_s}s", -1)
 
     stdout = proc.stdout or ""
     try:
@@ -150,10 +207,15 @@ def run_agent(
     result = data.get("result")
     text = result if isinstance(result, str) else ""
     is_error = bool(data.get("is_error"))
-    ok = proc.returncode == 0 and not is_error
+    subtype = data.get("subtype")
+    good_subtype = subtype in _OK_SUBTYPES
+    ok = proc.returncode == 0 and not is_error and good_subtype
     error = None
     if not ok:
         error = text or f"claude exited {proc.returncode}"
+        if not good_subtype:
+            # error_max_turns, error_max_budget_usd, error_during_execution, ...
+            error = f"{subtype}: {error}"
     sid = data.get("session_id")
     turns = data.get("num_turns")
     return AgentResult(

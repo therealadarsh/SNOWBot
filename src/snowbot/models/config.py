@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from snowbot.errors import ConfigError, FileOperationError
 
@@ -69,12 +69,16 @@ class PipelineConfig(BaseModel):
 class RunnerConfig(BaseModel):
     """Issue runner settings (``runner:`` block of ``snowbot.yaml``)."""
 
+    # A misspelt limit (``max_turn``) must fail loudly instead of silently using the default.
+    model_config = ConfigDict(extra="forbid")
+
     repo: str | None = None
     sandbox: Literal["host"] | None = None
     poll_interval_s: int = Field(default=300, gt=0)
     max_runs_per_day: int = Field(default=5, gt=0)
     max_turns: int = Field(default=40, gt=0)
-    max_budget_usd: float = Field(default=3.0, gt=0)
+    # At least one cent: the CLI flag is printed to cents, and 0.00 must never be sent.
+    max_budget_usd: float = Field(default=3.0, ge=0.01)
     timeout_s: int = Field(default=1800, gt=0)
     fix_rounds: int = Field(default=2, gt=0)
     model: str | None = None

@@ -52,3 +52,18 @@ def test_runner_ints_must_be_positive(field: str, value: int) -> None:
 def test_runner_budget_must_be_positive(value: float) -> None:
     with pytest.raises(ValidationError):
         RunnerConfig(max_budget_usd=value)
+
+
+@pytest.mark.parametrize("value", [0.001, 0.009])
+def test_runner_budget_at_least_one_cent(value: float) -> None:
+    # The CLI flag is formatted to cents; anything below 0.01 would print as "0.00".
+    with pytest.raises(ValidationError):
+        RunnerConfig(max_budget_usd=value)
+    assert RunnerConfig(max_budget_usd=0.01).max_budget_usd == 0.01
+
+
+def test_runner_unknown_key_rejected() -> None:
+    with pytest.raises(ValidationError, match="extra"):
+        RunnerConfig.model_validate({"max_turn": 10})
+    with pytest.raises(ValidationError):
+        SnowbotConfig.model_validate({"runner": {"sandbox": "host", "timout_s": 5}})
