@@ -24,7 +24,7 @@ Do **not** feed validator agents implementer reasoning or chat transcripts.
 ## Validator commands
 
 ```bash
-export SNOWBOT_VALIDATE_BASE=origin/uat    # the PR's base: origin/uat for feat/*, origin/main for governance/*
+export SNOWBOT_VALIDATE_BASE=origin/main   # the PR's base: origin/main today; origin/uat for feat/* from phase 5
 export SNOWBOT_PHASE_ID=2b                 # from the feat/<phase>-<slug> branch name
 export PR_URL=https://github.com/org/repo/pull/N
 ./scripts/independent_validate.sh
@@ -59,4 +59,4 @@ comm -23 /tmp/base.txt /tmp/head.txt   # must print nothing
 
 ## Merge gate
 
-Feature PRs merge into `uat` only through the orchestrator, after the validator passed the exact head commit and the required checks (`CI`, `architect-gate`, `test-inventory`) are green. Governance PRs and release PRs into `main` are merged by a person. There is no bypass label.
+Until phase `5` there is no `uat` branch: a person merges feature PRs into `main` after the validator passed and the required checks are green. From phase `5`, feature PRs merge into `uat` only through the orchestrator, after the validator passed the exact head commit and the required checks (`CI`, `architect-gate`, `test-inventory`) are green. Governance PRs and release PRs into `main` are merged by a person. There is no bypass label.

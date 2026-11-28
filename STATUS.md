@@ -8,14 +8,21 @@
 
 The shared handoff (see "Start here" in `AGENTS.md`). Keep it short and true. Update it in every PR.
 
-_Updated: 2026-11-06, in the bootstrap PR (`governance/autonomous-pipeline`)._
+_Updated: 2026-11-28, in `governance/runner-v1-flow`._
 
-- **Current phase:** bootstrap. This PR sets the governance the unattended build run needs: the `uat` merge policy, checklist entries for every phase, hardened CI, and the owner setup guide.
+- **Current phase:** `3r`, the issue runner v1. It turns a labeled GitHub issue into a draft PR against `main`: the agent proposes failing acceptance tests, the owner approves them, then the agent implements. A person merges every PR. The `uat` pipeline from the bootstrap PR (#14) comes later, in phase `5`.
 - **Works now (try it):** `snowbot validate --phase 1b`, `snowbot lesson …`, `snowbot playbook`, `snowbot onboard`, `snowbot status --check`, `snowbot doctor` (basic).
-- **In progress:** nothing else. Feature phases wait for this PR.
-- **Next:** phase `2b`, the change-impact tool (`snowbot impact`), built by the unattended run once this PR is merged and the `main` and `uat` rulesets are in place.
-- **Open decisions (need a person):** merge this PR; set the rulesets (`docs/OWNER_SETUP.md`), allowing merge commits on both `main` and `uat`; choose whether release PRs may auto-merge after product-owner acceptance (off by default).
-- **Known problems:** `architect-gate` fails on this PR only. It installs the validator from `main`, and `main`'s packaging can't build a wheel. This PR fixes the packaging, so the gate works from the next PR on.
+- **In progress:**
+  - this PR: rules that put the `uat` branch, containers and the orchestrator in later phases, plus phase `3r` in the checklist;
+  - draft runner PRs #27 (Claude Code backend and runner config), #28 (GitHub client, worktrees, diff policy) and #29 (gates and red/green test checks).
+- **Next:** after this PR merges, put the runner PRs on phase `3r` (rename each branch to `feat/3r-<slug>` or add a `phase:3r` label) so `architect-gate` accepts them. Then the remaining runner tasks: the lock check and prompts (governance PRs), the stages, `snowbot run --issue <N>` and `snowbot watch`, and a capped pilot on one issue.
+- **Open decisions (need a person):**
+  - merge this PR;
+  - whether the runner's test runs get a network sandbox (today agent-written tests can read credentials stored under `HOME`);
+  - whether runner commits skip git hooks (`--no-verify`).
+- **Known problems:**
+  - two tests in `tests/lessons/test_admission.py` call the real GitHub API and fail when it rate-limits CI (403);
+  - local `mypy` fails when numpy 2.5 is installed in the environment: its stubs need Python 3.12, and the mypy config targets 3.11.
 
 Template for a fresh **Where we are**:
 
@@ -38,11 +45,12 @@ Phase ids are strings (`"1"`, `"1b"`, `"2"`, …). Phase **1b** is not phase **2
 | -------- | ----- | ------ |
 | `1` | Scaffold, models, errors, logging, tests, CI, repo meta | Merged on `main` |
 | `1b` | Phase validator, lessons memory, architect gate | Merged on `main` |
-| bootstrap | Governance for the unattended run (`AGENTS.md` merge policy, checklist, CI, `docs/OWNER_SETUP.md`) | In progress on `governance/autonomous-pipeline`. A person merges this PR before later phases continue. |
+| bootstrap | Governance for the unattended run (`AGENTS.md` merge policy, checklist, CI, `docs/OWNER_SETUP.md`) | Merged on `main` (#14) |
 | `2b` | `snowbot impact` (git history, undoes-fix, callers, reports) | Not started |
 | `2` | `snowbot doctor` environment and agent-CLI checks | Not started |
 | `4` | `snowbot login`, `snowbot init`, shell, role templates with output contracts | Not started |
 | `3` | Headless backends: Cursor CLI, Claude Code, Codex, in Docker | Not started |
+| `3r` | Issue runner v1: GitHub issue to draft PR on `main`, Claude Code on the host, a person merges | In progress (#27, #28, #29) |
 | `5` | `snowbot run`: ticket pipeline, approval log, merge to `uat` | Not started |
 | `5b` | GitHub Issues and ServiceNow intake | Not started |
 | `7` | Sample app UAT deploy (AWS CDK, skipped without a role) | Not started |

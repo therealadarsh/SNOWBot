@@ -10,7 +10,7 @@ import yaml
 
 from snowbot.validator.checks import _CHECK_RUNNERS
 
-PLANNED_PHASES = ("1", "1b", "2b", "2", "4", "3", "5", "5b", "7", "8", "2c", "6", "9")
+PLANNED_PHASES = ("1", "1b", "2b", "2", "4", "3", "3r", "5", "5b", "7", "8", "2c", "6", "9")
 
 
 def _phases() -> dict[str, Any]:
