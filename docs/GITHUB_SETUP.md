@@ -8,7 +8,7 @@ The independent technical check is CI (`architect-gate`), not GitHub approval bo
 
 ## Rulesets on `main` and `uat`
 
-Settings → Rules → Rulesets. Create one ruleset per branch.
+Settings → Rules → Rulesets. Create one ruleset per branch. The `uat` branch and its ruleset come with phase `5`; until then set up `main` only.
 
 | Setting | `main` | `uat` |
 | ------- | ------ | ----- |

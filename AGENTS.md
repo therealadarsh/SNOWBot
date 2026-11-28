@@ -10,6 +10,8 @@ It also includes a change-impact tool that explains what a commit affects, using
 
 Phases `1` and `1b` built the package, config models, CI, the phase validator and the lessons memory. The rest of the plan is in `STATUS.md`.
 
+**Now and later.** The `uat` branch, the orchestrator that merges into it, the second-model approver, UAT deploys and agent containers come in later phases (`3`, `5` and `7`). Until they land, the only automation that writes code is the issue runner (phase `3r`). It opens draft PRs against `main`, and a person reviews and merges every one. Rules below marked *from phase N* describe that later pipeline. Their *until then* rule is the one in force today.
+
 ## Start here (every session, every agent, every person)
 
 The project's memory lives in files, not in anyone's chat history. Before you change anything, read in this order:
@@ -28,7 +30,7 @@ When you finish a unit of work, update **Where we are** in the same PR: what cha
 Phase ids are strings: `"1"`, `"1b"`, `"2"`, `"2b"`, and so on. Never use the integer `2` to mean phase `1b`. Branch names carry the phase: `feat/<phase>-<slug>`, for example `feat/2b-signals`.
 
 ```bash
-snowbot validate --phase 2b --base-ref uat
+snowbot validate --phase 2b --base-ref main   # --base-ref uat from phase 5
 ```
 
 ## Layout (repo root)
@@ -54,18 +56,22 @@ Everything lives at the repository root. Don't add a nested `SNOWBot/` folder.
 - Config file: `snowbot.yaml`
 - Display name: SNOWBot
 - Setup branch in consumer repos: `chore/snowbot-setup`
-- Integration branch: `uat`
+- Integration branch: `uat`, created in phase `5`. Until then feature PRs target `main`.
+- Issue runner branches: `snowbot/issue-<N>`
 
 ## Branches and merging
 
 | Branch | Who may merge into it | How |
 | ------ | --------------------- | --- |
-| `main` | A person only | Pull request from `release/<date>` or a `governance/<slug>` branch |
-| `uat` | The orchestrator only (`run_loop.py` here, `snowbot run` in consumer repos) | Pull request, after all the checks below |
-| `feat/<phase>-<slug>` | Nobody merges into these | Branch from `uat` |
+| `main` | A person only | Pull request from `release/<date>` or a `governance/<slug>` branch. Until phase `5`, also from `feat/<phase>-<slug>` and `snowbot/issue-<N>` |
+| `uat` (from phase `5`) | The orchestrator only (`run_loop.py` here, `snowbot run` in consumer repos) | Pull request, after all the checks below |
+| `feat/<phase>-<slug>` | Nobody merges into these | Branch from `uat`. Until phase `5`, branch from `main` |
+| `snowbot/issue-<N>` | Nobody merges into these | The issue runner branches from `main` and opens a draft PR to `main` |
 | `governance/<slug>` | Nobody merges into these | Branch from `main`, PR to `main` with the `governance` label |
 
-The orchestrator may merge a feature PR into `uat` only when all of these are true:
+**Until phase `5`:** a person merges every PR into `main`, and only after `CI`, `architect-gate` and `test-inventory` are green on its head commit. Nothing auto-merges. Feature PRs also need the independent validation below.
+
+**From phase `5`:** the orchestrator may merge a feature PR into `uat` only when all of these are true:
 
 1. An independent validator passed this exact head commit.
 2. CI is green on that commit. Cancelled or missing checks count as failed.
@@ -85,6 +91,8 @@ After the builder's checks pass, a separate validator reviews the PR in a fresh 
 2. It runs ruff, mypy, pytest with coverage, `snowbot validate --phase <id> --base-ref <base>` and `snowbot status --check`. These are the commands in `docs/INDEPENDENT_VALIDATION.md`.
 3. On `fail`: the PR stays a draft, a stop event and a proposed lesson are written, and the builder gets at most two fix rounds.
 4. On `pass` or `pass_with_notes`: the verdict and checks are posted on the PR. Feature PRs then go through the merge checks above. Governance PRs wait for a person.
+
+Until phase `5`, issue runner PRs (`snowbot/issue-<N>`) have no second-model approver. The runner's own gates, its evidence packet and the person who merges stand in for it.
 
 ## Anti-gaming (mandatory)
 
@@ -112,8 +120,14 @@ Only the people listed in `owners.product_owners` in `snowbot.yaml` can accept, 
 
 ## Sandboxing and credentials
 
-- Agents run in a container that holds a model token and nothing else: no GitHub token, no SSH keys, no cloud credentials. Running an agent on the host needs an explicit `sandbox: host` setting, and `snowbot doctor` warns about it.
-- Repository code under analysis is never imported. Tests that execute it run in a container without network.
+- From phase `3`, agents run in a container that holds a model token and nothing else: no GitHub token, no SSH keys, no cloud credentials. Running an agent on the host needs an explicit `sandbox: host` setting, and `snowbot doctor` warns about it.
+- Until then, the issue runner runs Claude Code on the host, and only when `runner.sandbox: host` is set in `snowbot.yaml`; without it the runner refuses to start. On the host, the agent:
+  - runs inside Claude Code's own sandbox with network blocked;
+  - gets only an allowlisted environment (no GitHub, cloud or model API tokens);
+  - can't change agent or tool config.
+
+  The runner's diff policy, not the agent, decides which files the agent may change.
+- Repository code under analysis is never imported. From phase `3`, tests that execute it run in a container without network. Until then, the issue runner runs the tests in a separate worktree on the host, with the same allowlisted environment. Whether those test runs also get a network sandbox is an open decision in `STATUS.md`.
 - Keys live in the OS keychain or in environment variables. In hosted mode they live in AWS Secrets Manager. Never in files, logs, prompts, reports or PR text.
 - Logs pass through the redaction filters. Still treat them as untrusted when debugging.
 
@@ -138,10 +152,11 @@ Planned, by phase (see `STATUS.md`):
 
 | Command | Phase |
 | ------- | ----- |
+| `snowbot run --issue <N>`, `snowbot watch` (issue runner) | `3r` |
 | `snowbot impact`, `snowbot hook install` | `2b` |
 | `snowbot doctor` (full environment and agent sign-in checks) | `2` |
 | `snowbot login`, `snowbot logout`, `snowbot init`, `snowbot` (interactive shell) | `4` |
-| `snowbot run <ticket>`, `snowbot audit verify` | `5` |
+| `snowbot run <ticket>` (full pipeline), `snowbot audit verify` | `5` |
 | `snowbot intake connect github\|servicenow` | `5b` |
 | `snowbot ui` | `8` |
 | `snowbot ask --as-of <ref>`, `snowbot drift` | `2c` |

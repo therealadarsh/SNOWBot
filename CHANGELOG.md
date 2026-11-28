@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Merge rules for phase `3r`, the issue runner. Until phase `5` creates the `uat` branch, feature and issue-runner PRs target `main` and a person merges them. Agent containers move to phase `3`. Phase `3r` has a validator checklist, so `architect-gate` accepts `feat/3r-…` branches.
+
 ### Fixed
 
 - Lesson index lists each lesson once. Proposed and retired lessons share one directory; scanning it twice had duplicated every entry in `INDEX.yaml`.

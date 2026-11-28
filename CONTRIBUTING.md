@@ -15,9 +15,10 @@ pre-commit install
 
 | Branch | Base | Merged by |
 | ------ | ---- | --------- |
-| `feat/<phase>-<slug>` (e.g. `feat/2b-signals`) | `uat` | The orchestrator, after validation and CI |
+| `feat/<phase>-<slug>` (e.g. `feat/2b-signals`) | `main` until phase `5`, then `uat` | A person until phase `5`, then the orchestrator, after validation and CI |
+| `snowbot/issue-<N>` | `main` | A person (draft PRs opened by the issue runner) |
 | `governance/<slug>` | `main` | A person (label `governance`) |
-| `release/<date>` | `uat` | A person, into `main` |
+| `release/<date>` | `uat` (from phase `5`) | A person, into `main` |
 
 `architect-gate` reads the phase from the `feat/<phase>-` prefix. Template setup branches in consumer repos use `chore/snowbot-setup`.
 
@@ -38,7 +39,7 @@ Bring your branch up to date with its base (merge the base in once a PR is open;
 Implementers run local gates first. Before marking a PR **ready for review**, an independent validator (separate agent or human with fresh context) must run:
 
 ```bash
-export SNOWBOT_VALIDATE_BASE=origin/uat    # the PR's base branch
+export SNOWBOT_VALIDATE_BASE=origin/main   # the PR's base branch (origin/uat for feat/* from phase 5)
 export PR_URL=https://github.com/therealadarsh/SNOWBot/pull/N
 ./scripts/independent_validate.sh
 ```
@@ -53,7 +54,7 @@ See [AGENTS.md](AGENTS.md). Governance changes (validator, checklist, CI, covera
 
 Use the PR template checklist (validation verdict at top). PR titles must follow Conventional Commits (see `.github/workflows/pr-title.yml`).
 
-**Merge policy:** see `AGENTS.md`. A person merges into `main`; only the orchestrator merges into `uat`.
+**Merge policy:** see `AGENTS.md`. A person merges into `main`. From phase `5`, only the orchestrator merges into `uat`.
 
 ## Security
 

@@ -154,6 +154,21 @@ phases:
       - id: anti_gaming
         description: Diff must not weaken tests, thresholds, or mix governance edits
         kind: anti_gaming_diff
+  "3r":
+    title: Phase 3r issue runner v1 (GitHub issue to draft PR on main)
+    checks:
+      - id: changelog
+        description: CHANGELOG Unreleased section present
+        kind: file_contains
+        path: CHANGELOG.md
+        needle: "## [Unreleased]"
+      - id: status_md
+        description: STATUS.md tracks phase scope
+        kind: file_exists
+        path: STATUS.md
+      - id: anti_gaming
+        description: Diff must not weaken tests, thresholds, or mix governance edits
+        kind: anti_gaming_diff
   "5":
     title: Phase 5 pipeline orchestrator
     checks:
